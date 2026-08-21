@@ -1,0 +1,27 @@
+# Ortam degiskenleri / sirlar
+.env
+.env.local
+
+# Sanal ortamlar (Python) — her seviyede venv, venv310, venv_omr ...
+venv*/
+
+# Uretilen ciktilar / yuklemeler (buyuk)
+outputs/
+uploads/
+
+# Node / Expo (frontend)
+node_modules/
+.expo/
+
+# Test ciktilari (girdi gorselleri kalir, uretilenler haric)
+test_omr/out*
+
+# Loglar
+*.log
+
+# Gecici gelistirme scriptleri/ciktilari
+zz_*
+
+# Yedekler
+*.backup
+*.backup_*

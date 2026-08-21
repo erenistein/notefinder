@@ -1,0 +1,17 @@
+# Ortam degiskenleri / sirlar
+.env
+.env.local
+
+# Sanal ortamlar
+venv/
+venv310/
+venv_omr/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Uretilen ciktilar (istege bagli; buyuk)
+outputs/
+uploads/

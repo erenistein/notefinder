@@ -1,0 +1,111 @@
+{
+  "common": {
+    "error": "Error",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "tabs": {
+    "home": "Home",
+    "history": "My Notes"
+  },
+  "instruments": {
+    "piano": "Piano",
+    "guitar": "Guitar",
+    "saz": "Saz",
+    "violin": "Violin",
+    "ud": "Oud"
+  },
+  "home": {
+    "title": "Turn your music into sheet music",
+    "linkLabel": "Paste a YouTube link",
+    "contentQuestion": "What's in this recording?",
+    "fullSong": "Full song",
+    "fullSongSub": "Has drums, bass",
+    "simpleRecording": "Simple recording",
+    "simpleRecordingSub": "No drums",
+    "contentHint": "If unsure, don't touch",
+    "orListen": "or play it",
+    "listen": "Play a song",
+    "recording": "Recording — {{time}}",
+    "instrumentLabel": "Which instrument do you want?",
+    "recentConversions": "Recent conversions",
+    "stepDownloading": "Downloading audio...",
+    "stepExtracting": "Extracting notes...",
+    "stepUploading": "Uploading recording...",
+    "loadingHint": "This may take 30-60 seconds",
+    "errorEmptyLink": "Please paste a YouTube link",
+    "micPermTitle": "Microphone permission required",
+    "micPermBody": "Recording needs microphone access. You can grant it from device settings.",
+    "recordStartError": "Couldn't start recording: {{error}}",
+    "recordFileNotFound": "Recording file not found, please try again.",
+    "recordProcessFailTitle": "Recording couldn't be processed",
+    "recordProcessFailBody": "Please try a clearer and longer recording.",
+    "nameModalTitle": "Name your recording",
+    "nameModalSub": "Change it if you like, or save as is.",
+    "nameModalPlaceholder": "Recording name",
+    "qualityHint": "Best results come from clear, single-instrument recordings. Notes may be missing on busy or noisy tracks.",
+    "unknownSong": "Unknown Song",
+    "autoRecordPrefix": "Recording",
+    "downloadError": "Download error",
+    "uploadError": "Upload error",
+    "analysisError": "Analysis error"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "languageName": "English",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "privacy": "Privacy & GDPR",
+    "privacyBody": "The privacy policy and data protection notice will be available here soon.",
+    "about": "About",
+    "aboutDescription": "NoteFindr analyzes the leading melody in your audio and turns it into sheet music. You'll get the best results from clear, single-instrument, clean recordings. On multi-instrument, noisy, or unclear tracks, the result may be incomplete or inaccurate. Piano uses a dedicated model and delivers the highest accuracy; for guitar, saz, violin, and oud the results are a solid starting draft.",
+    "developedFor": "Developed for Alp Volkan Bey",
+    "languagePickerTitle": "Select language"
+  },
+  "result": {
+    "newSong": "New Song",
+    "first20Notes": "First 20 notes:",
+    "tempo": "Tempo",
+    "key": "Key",
+    "notes": "Notes",
+    "duration": "Duration",
+    "bpmValue": "{{tempo}} BPM",
+    "pdfNotReady": "PDF not generated yet",
+    "downloading": "Downloading...",
+    "downloadPdf": "Download PDF sheet music",
+    "midi": "MIDI",
+    "share": "Share"
+  },
+  "history": {
+    "title": "My Notes",
+    "conversionCount_one": "{{count}} conversion",
+    "conversionCount_other": "{{count}} conversions",
+    "emptyTitle": "No conversions yet",
+    "emptyText": "It will appear here once you convert a song from the home screen.",
+    "deleteTitle": "Delete record",
+    "deleteMessage": "Delete \"{{title}}\"?",
+    "deleteConfirm": "Delete"
+  },
+  "date": {
+    "justNow": "just now",
+    "minutesAgo_one": "{{count}} minute ago",
+    "minutesAgo_other": "{{count}} minutes ago",
+    "hoursAgo_one": "{{count}} hour ago",
+    "hoursAgo_other": "{{count}} hours ago",
+    "yesterday": "yesterday",
+    "daysAgo_one": "{{count}} day ago",
+    "daysAgo_other": "{{count}} days ago",
+    "weeksAgo_one": "{{count}} week ago",
+    "weeksAgo_other": "{{count}} weeks ago",
+    "monthsAgo_one": "{{count}} month ago",
+    "monthsAgo_other": "{{count}} months ago",
+    "yearsAgo_one": "{{count}} year ago",
+    "yearsAgo_other": "{{count}} years ago"
+  },
+  "share": {
+    "failTitle": "Download failed",
+    "failBody": "The file couldn't be downloaded or shared. Check your internet/server connection."
+  }
+}

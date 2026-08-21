@@ -1,0 +1,111 @@
+{
+  "common": {
+    "error": "Hata",
+    "cancel": "İptal",
+    "save": "Kaydet"
+  },
+  "tabs": {
+    "home": "Ana Sayfa",
+    "history": "Notalarım"
+  },
+  "instruments": {
+    "piano": "Piyano",
+    "guitar": "Gitar",
+    "saz": "Saz",
+    "violin": "Keman",
+    "ud": "Ud"
+  },
+  "home": {
+    "title": "Müziğini notalara dök",
+    "linkLabel": "YouTube linki yapıştır",
+    "contentQuestion": "Bu kayıtta ne var?",
+    "fullSong": "Tam şarkı",
+    "fullSongSub": "Davul, bas var",
+    "simpleRecording": "Sade kayıt",
+    "simpleRecordingSub": "Davul yok",
+    "contentHint": "Emin değilsen dokunma",
+    "orListen": "veya dinlet",
+    "listen": "Şarkıyı dinlet",
+    "recording": "Kayıt — {{time}}",
+    "instrumentLabel": "Hangi enstrümanda istiyorsun?",
+    "recentConversions": "Son dönüştürmeler",
+    "stepDownloading": "Ses indiriliyor...",
+    "stepExtracting": "Notalar çıkarılıyor...",
+    "stepUploading": "Kayıt yükleniyor...",
+    "loadingHint": "Bu işlem 30-60 saniye sürebilir",
+    "errorEmptyLink": "Lütfen bir YouTube linki yapıştır",
+    "micPermTitle": "Mikrofon izni gerekli",
+    "micPermBody": "Kayıt için mikrofon iznine ihtiyaç var. Cihaz ayarlarından izin verebilirsin.",
+    "recordStartError": "Kayıt başlatılamadı: {{error}}",
+    "recordFileNotFound": "Kayıt dosyası bulunamadı, tekrar dene.",
+    "recordProcessFailTitle": "Kayıt işlenemedi",
+    "recordProcessFailBody": "Lütfen daha net ve uzun bir kayıt deneyin.",
+    "nameModalTitle": "Kayda isim ver",
+    "nameModalSub": "İstersen değiştir, istersen olduğu gibi kaydet.",
+    "nameModalPlaceholder": "Kayıt adı",
+    "qualityHint": "En iyi sonuç net ve tek enstrümanlı kayıtlarda alınır. Kalabalık/gürültülü parçalarda notalar eksik çıkabilir.",
+    "unknownSong": "Bilinmeyen Şarkı",
+    "autoRecordPrefix": "Kayıt",
+    "downloadError": "İndirme hatası",
+    "uploadError": "Yükleme hatası",
+    "analysisError": "Analiz hatası"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "language": "Dil",
+    "languageName": "Türkçe",
+    "theme": "Tema",
+    "themeLight": "Açık",
+    "themeDark": "Koyu",
+    "privacy": "Gizlilik & KVKK",
+    "privacyBody": "Gizlilik politikası ve KVKK aydınlatma metni yakında burada yer alacak.",
+    "about": "Hakkında",
+    "aboutDescription": "NoteFindr, sesteki baskın melodiyi analiz edip nota kağıdına döker. En iyi sonuçlar net, tek enstrümanlı ve temiz kayıtlarda alınır. Çok enstrümanlı, gürültülü veya melodisi belirsiz kayıtlarda sonuç eksik ya da hatalı olabilir. Piyano için özel bir model kullanılır ve en yüksek doğruluğu verir; gitar, saz, keman ve ud için sonuçlar iyi bir başlangıç taslağı niteliğindedir.",
+    "developedFor": "Alp Volkan Bey için geliştirildi",
+    "languagePickerTitle": "Dil seç"
+  },
+  "result": {
+    "newSong": "Yeni Şarkı",
+    "first20Notes": "İlk 20 nota:",
+    "tempo": "Tempo",
+    "key": "Anahtar",
+    "notes": "Notalar",
+    "duration": "Süre",
+    "bpmValue": "{{tempo}} BPM",
+    "pdfNotReady": "PDF henüz oluşturulmadı",
+    "downloading": "İndiriliyor...",
+    "downloadPdf": "PDF Nota Kağıdı İndir",
+    "midi": "MIDI",
+    "share": "Paylaş"
+  },
+  "history": {
+    "title": "Notalarım",
+    "conversionCount_one": "{{count}} dönüştürme",
+    "conversionCount_other": "{{count}} dönüştürme",
+    "emptyTitle": "Henüz dönüştürme yok",
+    "emptyText": "Ana sayfadan bir şarkı çıkardığında burada görünecek.",
+    "deleteTitle": "Kaydı sil",
+    "deleteMessage": "\"{{title}}\" silinsin mi?",
+    "deleteConfirm": "Sil"
+  },
+  "date": {
+    "justNow": "az önce",
+    "minutesAgo_one": "{{count}} dakika önce",
+    "minutesAgo_other": "{{count}} dakika önce",
+    "hoursAgo_one": "{{count}} saat önce",
+    "hoursAgo_other": "{{count}} saat önce",
+    "yesterday": "dün",
+    "daysAgo_one": "{{count}} gün önce",
+    "daysAgo_other": "{{count}} gün önce",
+    "weeksAgo_one": "{{count}} hafta önce",
+    "weeksAgo_other": "{{count}} hafta önce",
+    "monthsAgo_one": "{{count}} ay önce",
+    "monthsAgo_other": "{{count}} ay önce",
+    "yearsAgo_one": "{{count}} yıl önce",
+    "yearsAgo_other": "{{count}} yıl önce"
+  },
+  "share": {
+    "failTitle": "İndirme başarısız",
+    "failBody": "Dosya indirilemedi veya paylaşılamadı. İnternet/sunucu bağlantısını kontrol et."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Copy-Item \"C:\\\\Users\\\\90553\\\\notefinder-mobile\\\\notefinder-backend\\\\main.py\" \"C:\\\\Users\\\\90553\\\\notefinder-mobile\\\\notefinder-backend\\\\main.py.backup\" -Force; if \\(Test-Path \"C:\\\\Users\\\\90553\\\\notefinder-mobile\\\\notefinder-backend\\\\main.py.backup\"\\) { Write-Output \"Yedek alindi: main.py.backup \\($\\(\\(Get-Item 'C:\\\\Users\\\\90553\\\\notefinder-mobile\\\\notefinder-backend\\\\main.py.backup'\\).Length\\) byte\\)\" })",
+      "PowerShell(Invoke-Item \"C:\\\\Users\\\\90553\\\\notefinder-mobile\\\\notefinder-backend\\\\outputs\\\\6192f34b.pdf\"; if \\($?\\) { Write-Output \"Acildi: 6192f34b.pdf \\(Adim 3 - olcu senkronlu, barline + slur + tie\\)\" })"
+    ]
+  }
+}
