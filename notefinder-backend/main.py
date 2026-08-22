@@ -8,13 +8,17 @@ import shutil
 import numpy as np
 import librosa
 from midiutil import MIDIFile
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from enum import Enum
 import mido
+from dotenv import load_dotenv
 import jobs  # arka plan is mekanizmasi (registry + SQLite + ThreadPoolExecutor)
+
+# .env'i yukle (LILYPOND_BIN vb. os.getenv ile okunabilsin)
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # Arka plan job sure tahminleri (kaba ilerleme cubugu icin)
 OMR_EST_SEC = 360        # oemer ~6 dk
@@ -30,6 +34,13 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Backend acilista: onceki oturumdan yarim kalan (running/queued) isleri failed'a cevir
 jobs.init_jobs()
+
+
+@app.exception_handler(RuntimeError)
+async def _runtime_error_handler(request: Request, exc: RuntimeError):
+    """generate_pdf gibi RuntimeError firlatan yerler -> senkron istekte 500 + Turkce mesaj.
+    (Async job'larda hata jobs.runner tarafindan yakalanir; bu handler yalniz istek dongusu icin.)"""
+    return JSONResponse(status_code=500, content={"detail": str(exc)})
 
 NOTE_NAMES = ["Do", "Do#", "Re", "Re#", "Mi", "Fa", "Fa#", "Sol", "Sol#", "La", "La#", "Si"]
 LILY_NOTES = ["c", "cis", "d", "dis", "e", "f", "fis", "g", "gis", "a", "ais", "b"]
@@ -1060,6 +1071,28 @@ def convert_notes_for_target(notes, target, tempo):
         out = _fit_to_range(out, prof["range"][0], prof["range"][1])
     return out
 
+# LilyPond'un bilinen sabit kurulum yolu (PATH'te ve .env'de yoksa son care)
+_LILYPOND_FALLBACK = r"C:\Users\90553\Downloads\lilypond-2.26.0-mingw-x86_64\lilypond-2.26.0\bin\lilypond.exe"
+
+
+def resolve_lilypond():
+    """LilyPond calistirilabilirini su sirayla bul:
+    1) .env LILYPOND_BIN (acikca verildiyse OTORITER: yoksa None -> anlamli hata, sessizce fallback YOK)
+    2) PATH'teki 'lilypond'
+    3) bilinen sabit kurulum yolu (_LILYPOND_FALLBACK)
+    Bulunamazsa None doner (cagiran RuntimeError firlatir)."""
+    env_bin = (os.getenv("LILYPOND_BIN") or "").strip().strip('"')
+    if env_bin:
+        cand = os.path.join(env_bin, "lilypond.exe") if os.path.isdir(env_bin) else env_bin
+        return cand if os.path.exists(cand) else None
+    which = shutil.which("lilypond")
+    if which:
+        return which
+    if os.path.exists(_LILYPOND_FALLBACK):
+        return _LILYPOND_FALLBACK
+    return None
+
+
 def generate_pdf(job_id, notes, tempo, key_name, key_idx, instrument, song_title="", key_is_major=True):
     inst_names = {"piano": "Piyano", "guitar": "Gitar", "saz": "Baglama / Saz", "violin": "Keman", "ud": "Ud"}
     inst_display = inst_names.get(instrument, "Piyano")
@@ -1132,19 +1165,23 @@ def generate_pdf(job_id, notes, tempo, key_name, key_idx, instrument, song_title
     lily_path = os.path.join(OUTPUT_DIR, f"{job_id}.ly")
     with open(lily_path, "w", encoding="utf-8") as f:
         f.write(lily_content)
+    lily_bin = resolve_lilypond()
+    if not lily_bin:
+        print("LilyPond bulunamadi (LILYPOND_BIN / PATH / sabit yol) -> PDF uretilemedi.")
+        raise RuntimeError("Nota kağıdı oluşturulamadı")
     try:
         result = subprocess.run(
-            ["lilypond", "-o", os.path.join(OUTPUT_DIR, job_id), lily_path],
+            [lily_bin, "-o", os.path.join(OUTPUT_DIR, job_id), lily_path],
             capture_output=True, text=True, timeout=240,
         )
-        pdf_path = os.path.join(OUTPUT_DIR, f"{job_id}.pdf")
-        if os.path.exists(pdf_path):
-            return f"{job_id}.pdf"
-        print(f"LilyPond stderr: {result.stderr[:500]}")
-        return ""
     except Exception as e:
-        print(f"LilyPond hatasi: {e}")
-        return ""
+        print(f"LilyPond calistirma hatasi: {e}")
+        raise RuntimeError("Nota kağıdı oluşturulamadı")
+    pdf_path = os.path.join(OUTPUT_DIR, f"{job_id}.pdf")
+    if os.path.exists(pdf_path):
+        return f"{job_id}.pdf"
+    print(f"LilyPond stderr: {result.stderr[:500]}")
+    raise RuntimeError("Nota kağıdı oluşturulamadı")
 # ─── API Endpoints ───
 
 @app.get("/health")
