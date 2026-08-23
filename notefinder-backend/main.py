@@ -1188,21 +1188,53 @@ def generate_pdf(job_id, notes, tempo, key_name, key_idx, instrument, song_title
 def health():
     return {"status": "healthy", "service": "NoteFindr API"}
 
+def _ytdlp_error_detail(stderr):
+    """yt-dlp stderr'inden GERCEK hata satirini cikar (uyari/nag satirlari detail'i gizlemesin).
+    'ERROR' ile baslayan son satiri doner; yoksa son anlamli satiri."""
+    lines = [ln.strip() for ln in (stderr or "").splitlines() if ln.strip()]
+    errs = [ln for ln in lines if ln.upper().startswith("ERROR")]
+    if errs:
+        return errs[-1][:300]
+    return (lines[-1][:300] if lines else "Bilinmeyen indirme hatasi")
+
+
+# ffmpeg PATH'te olmayabilir; yt-dlp WAV'a cevirmek icin ffmpeg ister. Bilinen sabit kurulum:
+_FFMPEG_FALLBACK_DIR = r"C:\ffmpeg\bin"
+
+
+def resolve_ffmpeg_location():
+    """yt-dlp icin ffmpeg KLASORUNU coz: 1) .env FFMPEG_LOCATION, 2) PATH'teki ffmpeg, 3) sabit C:\\ffmpeg\\bin.
+    Bulunamazsa None (yt-dlp yine PATH'e bakar; yoksa anlamli 'ffmpeg not found' hatasi zaten yuzeye cikar)."""
+    env = (os.getenv("FFMPEG_LOCATION") or "").strip().strip('"')
+    if env:
+        return env  # dizin ya da exe; yt-dlp ikisini de kabul eder
+    which = shutil.which("ffmpeg")
+    if which:
+        return os.path.dirname(which)
+    if os.path.exists(os.path.join(_FFMPEG_FALLBACK_DIR, "ffmpeg.exe")):
+        return _FFMPEG_FALLBACK_DIR
+    return None
+
+
 @app.post("/api/v1/audio/from-link", response_model=LinkResponse)
 def download_from_link(request: LinkRequest):
     job_id = str(uuid.uuid4())[:8]
     try:
         # yt-dlp exe PATH'te yok ama yt_dlp modulu ANA venv'de kurulu; sys.executable ile cagir.
-        result = subprocess.run(
-            [sys.executable, "-m", "yt_dlp", "--extract-audio", "--audio-format", "wav",
-             "--output", os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
-             "--no-playlist", "--max-filesize", "50M",
-             "--js-runtimes", "node", "--remote-components", "ejs:github",
-             request.url],
-            capture_output=True, text=True, timeout=120,
-        )
+        # --no-update: kendini guncelleme kontrolunu/nag uyarisini atla (stderr temiz kalsin).
+        dl_cmd = [sys.executable, "-m", "yt_dlp", "--no-update", "--extract-audio", "--audio-format", "wav",
+                  "--output", os.path.join(UPLOAD_DIR, f"{job_id}.%(ext)s"),
+                  "--no-playlist", "--max-filesize", "50M",
+                  "--js-runtimes", "node", "--remote-components", "ejs:github"]
+        ff = resolve_ffmpeg_location()  # WAV donusumu ffmpeg ister; PATH'te yoksa acikca konum ver
+        if ff:
+            dl_cmd += ["--ffmpeg-location", ff]
+        dl_cmd.append(request.url)
+        result = subprocess.run(dl_cmd, capture_output=True, text=True, timeout=120)
         if result.returncode != 0:
-            raise HTTPException(status_code=400, detail=f"Hata: {result.stderr[:300]}")
+            # Uyarilari (WARNING/nag) log'a; kullaniciya YALNIZ gercek ERROR satirini goster.
+            print(f"yt-dlp stderr (tam):\n{result.stderr}")
+            raise HTTPException(status_code=400, detail=f"İndirme başarısız: {_ytdlp_error_detail(result.stderr)}")
         actual_file = ""
         for f in os.listdir(UPLOAD_DIR):
             if f.startswith(job_id):
@@ -1214,7 +1246,7 @@ def download_from_link(request: LinkRequest):
         title = ""
         try:
             tinfo = subprocess.run(
-                [sys.executable, "-m", "yt_dlp", "--no-playlist", "--skip-download",
+                [sys.executable, "-m", "yt_dlp", "--no-update", "--no-playlist", "--skip-download",
                  "--print", "%(title)s",
                  "--js-runtimes", "node", "--remote-components", "ejs:github",
                  request.url],

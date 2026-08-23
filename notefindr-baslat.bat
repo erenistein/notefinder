@@ -26,7 +26,7 @@ REM --- Dongu modu (ayri pencerede): coker ise 5 sn sonra yeniden; STOP bayragin
 cd /d "%~dp0notefinder-backend"
 if not exist "logs" mkdir "logs"
 if exist "logs\backend.stop" del "logs\backend.stop" >nul 2>&1
-set "PATH=C:\Users\90553\Downloads\lilypond-2.26.0-mingw-x86_64\lilypond-2.26.0\bin;%PATH%"
+set "PATH=C:\ffmpeg\bin;C:\Users\90553\Downloads\lilypond-2.26.0-mingw-x86_64\lilypond-2.26.0\bin;%PATH%"
 cls
 echo ==================================================
 echo   NoteFindr Backend - KALICI servis (port 8000)
