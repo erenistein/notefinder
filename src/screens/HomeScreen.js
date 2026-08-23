@@ -14,6 +14,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeContext";
 import { INSTRUMENTS, API } from "../constants";
 import { saveJob, getJobs, jobToResultParams } from "../utils/storage";
+import { startTranscribe, reconcileProcessingJobs } from "../services/jobs";
 import { formatRelativeDate } from "../utils/date";
 
 // Kayit ayarlari. iOS -> GERCEK WAV (LINEARPCM). Android -> expo-audio WAV'i native
@@ -57,6 +58,8 @@ export default function HomeScreen({ navigation }) {
   const [jobs, setJobs] = useState([]);
 
   const loadJobs = useCallback(async () => {
+    // Bekleme ekranindan ayrilmis "processing" isleri backend'den senkronla, sonra listeyi tazele.
+    await reconcileProcessingJobs().catch(() => {});
     setJobs(await getJobs());
   }, []);
 
@@ -83,32 +86,15 @@ export default function HomeScreen({ navigation }) {
     return `${t("home.autoRecordPrefix")} ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}`;
   };
 
-  // Ortak: job_id -> transcribe -> saveJob -> Result. (Mikrofon akışı kullanır; link akışı kendi kopyasıyla AYNEN kalır.)
+  // Ortak: job_id -> ASYNC transcribe baslat -> "processing" kaydi sakla -> Loading ekranina gec (poll orada).
+  // Eski bloklayan /transcription/transcribe cagrisi yerine 202 donen /transcribe kullanilir.
   const transcribeAndOpen = async (jobId, title, useDemucs = true) => {
-    setLoadingStep(t("home.stepExtracting"));
-    const res = await fetch(`${API.BASE_URL}/api/v1/transcription/transcribe`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: jobId, instrument: selectedInstrument, use_demucs: useDemucs }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || t("home.analysisError"));
-    }
-    const data = await res.json();
     const songTitle = title || t("home.unknownSong");
-    await saveJob({
-      jobId: data.job_id, title: songTitle, instrument: selectedInstrument,
-      tempo: data.tempo, key: data.key, totalNotes: data.total_notes,
-      duration: data.duration_seconds, hasPdf: !!data.pdf_file,
-    });
-    loadJobs();
-    navigation.navigate("Result", {
-      instrument: selectedInstrument, title: songTitle, jobId: data.job_id,
-      tempo: data.tempo, key: data.key, totalNotes: data.total_notes,
-      duration: data.duration_seconds, pdfFile: data.pdf_file,
-      midiFile: data.midi_file, notes: data.notes,
-    });
+    const newJobId = await startTranscribe(jobId, selectedInstrument, useDemucs);
+    // Notalarim'da hemen "İşleniyor..." gorunmesi icin processing kaydi (Loading ekrani done/failed'a gunceller).
+    await saveJob({ jobId: newJobId, title: songTitle, instrument: selectedInstrument, status: "processing" });
+    setLoading(false); // Home inline gostergesini kapat; bekleme ekrani devraliyor
+    navigation.navigate("Loading", { jobId: newJobId, instrument: selectedInstrument, title: songTitle });
   };
 
   // Kaydı yükle (WAV, multipart 'file') + transcribe. Yükleme göstergesi açık, hata yönetimli.
@@ -217,47 +203,8 @@ export default function HomeScreen({ navigation }) {
       }
       const downloadData = await downloadRes.json();
 
-      // Adım 2: Nota çıkar + PDF oluştur
-      setLoadingStep(t("home.stepExtracting"));
-      const transcribeRes = await fetch(`${API.BASE_URL}/api/v1/transcription/transcribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: downloadData.job_id, instrument: selectedInstrument, use_demucs: isFullSong }),
-      });
-      if (!transcribeRes.ok) {
-        const err = await transcribeRes.json();
-        throw new Error(err.detail || t("home.analysisError"));
-      }
-      const transcribeData = await transcribeRes.json();
-      const songTitle = downloadData.title || t("home.unknownSong");
-
-      // Cihaza KALICI kaydet (tek kaynak - hem Home hem History buradan okur)
-      await saveJob({
-        jobId: transcribeData.job_id,
-        title: songTitle,
-        instrument: selectedInstrument,
-        tempo: transcribeData.tempo,
-        key: transcribeData.key,
-        totalNotes: transcribeData.total_notes,
-        duration: transcribeData.duration_seconds,
-        hasPdf: !!transcribeData.pdf_file,
-      });
-      loadJobs(); // Home'daki listeyi hemen tazele
-
-      // Sonuç ekranına git
-      setLoading(false);
-      navigation.navigate("Result", {
-        instrument: selectedInstrument,
-        title: songTitle,
-        jobId: transcribeData.job_id,
-        tempo: transcribeData.tempo,
-        key: transcribeData.key,
-        totalNotes: transcribeData.total_notes,
-        duration: transcribeData.duration_seconds,
-        pdfFile: transcribeData.pdf_file,
-        midiFile: transcribeData.midi_file,
-        notes: transcribeData.notes,
-      });
+      // Adım 2: ASYNC transcribe başlat -> Loading ekranı (ilerleme orada poll edilir)
+      await transcribeAndOpen(downloadData.job_id, downloadData.title, isFullSong);
     } catch (e) {
       setLoading(false);
       Alert.alert(t("common.error"), e.message);
@@ -265,6 +212,17 @@ export default function HomeScreen({ navigation }) {
   };
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  // Liste ogesine dokununca: processing -> bekleme ekranina don; failed -> uyari; done -> Result.
+  const openJob = (item) => {
+    if (item.status === "processing") {
+      navigation.navigate("Loading", { jobId: item.jobId, instrument: item.instrument, title: item.title });
+    } else if (item.status === "failed") {
+      Alert.alert(t("loading.failedTitle"), t("home.failedRetryHint"));
+    } else {
+      navigation.navigate("Result", jobToResultParams(item));
+    }
+  };
 
   // Kayit sirasinda VE isim modali aciktayken enstruman degistirilemez (transcribe henuz olmadi).
   const instrumentsLocked = isRecording || nameModalVisible;
@@ -349,13 +307,19 @@ export default function HomeScreen({ navigation }) {
             {jobs.slice(0, 5).map((item) => {
               const inst = INSTRUMENTS.find((i) => i.id === item.instrument);
               return (
-                <TouchableOpacity key={item.jobId} style={s.histItem} onPress={() => navigation.navigate("Result", jobToResultParams(item))} activeOpacity={0.7}>
+                <TouchableOpacity key={item.jobId} style={s.histItem} onPress={() => openJob(item)} activeOpacity={0.7}>
                   <Text style={s.histIcon}>{inst?.icon || "🎵"}</Text>
                   <View style={s.histInfo}>
                     <Text style={s.histTitle} numberOfLines={1}>{item.title}</Text>
                     <Text style={s.histMeta}>{inst ? t(`instruments.${inst.id}`) : item.instrument} · {formatRelativeDate(item.createdAt)}</Text>
                   </View>
-                  <Text style={s.histArrow}>→</Text>
+                  {item.status === "processing" ? (
+                    <Text style={s.histProcessing}>{t("history.processing")}</Text>
+                  ) : item.status === "failed" ? (
+                    <Text style={s.histFailed}>{t("history.failed")}</Text>
+                  ) : (
+                    <Text style={s.histArrow}>→</Text>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -415,6 +379,7 @@ const makeStyles = (c) => StyleSheet.create({
   qualityHint: { fontSize: 11, color: c.textMuted, lineHeight: 15, marginTop: 10 },
   histItem: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 12, backgroundColor: c.surface, marginBottom: 8, gap: 12 },
   histIcon: { fontSize: 26 }, histInfo: { flex: 1 }, histTitle: { fontSize: 14, fontWeight: "600", color: c.text }, histMeta: { fontSize: 11, color: c.textSecondary, marginTop: 2 }, histArrow: { fontSize: 16, color: c.textMuted },
+  histProcessing: { fontSize: 11, fontWeight: "700", color: c.primary }, histFailed: { fontSize: 11, fontWeight: "700", color: c.danger },
   loadingBox: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30 },
   loadingText: { fontSize: 16, fontWeight: "600", color: c.text, marginTop: 20 },
   loadingHint: { fontSize: 13, color: c.textSecondary, marginTop: 8 },

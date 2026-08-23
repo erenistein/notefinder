@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeContext";
 import { INSTRUMENTS } from "../constants";
 import { getJobs, deleteJob, jobToResultParams } from "../utils/storage";
+import { reconcileProcessingJobs } from "../services/jobs";
 import { formatRelativeDate, formatDuration } from "../utils/date";
 
 export default function HistoryScreen({ navigation }) {
@@ -15,8 +16,21 @@ export default function HistoryScreen({ navigation }) {
   const [jobs, setJobs] = useState([]);
 
   const load = useCallback(async () => {
+    // "processing" isleri backend'den senkronla (bekleme ekranindan ayrilinmis olabilir), sonra tazele.
+    await reconcileProcessingJobs().catch(() => {});
     setJobs(await getJobs());
   }, []);
+
+  // Karta dokununca: processing -> bekleme ekranina don; failed -> uyari; done -> Result.
+  const openJob = (item) => {
+    if (item.status === "processing") {
+      navigation.navigate("Loading", { jobId: item.jobId, instrument: item.instrument, title: item.title });
+    } else if (item.status === "failed") {
+      Alert.alert(t("loading.failedTitle"), t("home.failedRetryHint"));
+    } else {
+      navigation.navigate("Result", jobToResultParams(item));
+    }
+  };
 
   // Sekmeye HER geçişte tazele (yeni dönüştürme yapıp History'ye gelince güncel görünsün).
   useFocusEffect(
@@ -54,11 +68,18 @@ export default function HistoryScreen({ navigation }) {
         ) : (
           jobs.map((item) => {
             const inst = INSTRUMENTS.find((i) => i.id === item.instrument);
+            const isProcessing = item.status === "processing";
+            const isFailed = item.status === "failed";
+            const instName = inst ? t(`instruments.${inst.id}`) : item.instrument;
+            // done -> enstruman · sure · tarih ; processing/failed -> enstruman · tarih (sure yok)
+            const meta = (isProcessing || isFailed)
+              ? `${instName} · ${formatRelativeDate(item.createdAt)}`
+              : `${instName} · ${formatDuration(item.duration)} · ${formatRelativeDate(item.createdAt)}`;
             return (
               <TouchableOpacity
                 key={item.jobId}
                 style={s.card}
-                onPress={() => navigation.navigate("Result", jobToResultParams(item))}
+                onPress={() => openJob(item)}
                 onLongPress={() => handleDelete(item)}
                 delayLongPress={400}
                 activeOpacity={0.7}
@@ -68,11 +89,13 @@ export default function HistoryScreen({ navigation }) {
                 </View>
                 <View style={s.cardInfo}>
                   <Text style={s.cardTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={s.cardMeta}>
-                    {inst ? t(`instruments.${inst.id}`) : item.instrument} · {formatDuration(item.duration)} · {formatRelativeDate(item.createdAt)}
-                  </Text>
+                  <Text style={s.cardMeta}>{meta}</Text>
                 </View>
-                {item.hasPdf ? (
+                {isProcessing ? (
+                  <View style={[s.statusBadge, { backgroundColor: colors.primary + "20" }]}><Text style={[s.statusText, { color: colors.primary }]}>{t("history.processing")}</Text></View>
+                ) : isFailed ? (
+                  <View style={[s.statusBadge, { backgroundColor: colors.danger + "20" }]}><Text style={[s.statusText, { color: colors.danger }]}>{t("history.failed")}</Text></View>
+                ) : item.hasPdf ? (
                   <View style={s.pdfBadge}><Text style={s.pdfText}>PDF</Text></View>
                 ) : null}
                 <TouchableOpacity onPress={() => handleDelete(item)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={s.delBtn}>
@@ -94,6 +117,7 @@ const makeStyles = (c) => StyleSheet.create({
   iconBox: { width: 48, height: 48, borderRadius: 12, alignItems: "center", justifyContent: "center" }, icon: { fontSize: 24 },
   cardInfo: { flex: 1 }, cardTitle: { fontSize: 15, fontWeight: "600", color: c.text }, cardMeta: { fontSize: 11, color: c.textSecondary, marginTop: 3 },
   pdfBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: c.primary + "20" }, pdfText: { fontSize: 11, fontWeight: "600", color: c.primary },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }, statusText: { fontSize: 11, fontWeight: "700" },
   delBtn: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: c.surfaceLight }, delText: { color: c.textSecondary, fontSize: 13, fontWeight: "700" },
   empty: { alignItems: "center", paddingVertical: 70 }, emptyIcon: { fontSize: 52, marginBottom: 14 },
   emptyTitle: { fontSize: 16, fontWeight: "700", color: c.text, marginBottom: 6 }, emptyText: { fontSize: 13, color: c.textSecondary, textAlign: "center", paddingHorizontal: 30 },

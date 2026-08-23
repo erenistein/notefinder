@@ -2,7 +2,18 @@
   "common": {
     "error": "Hata",
     "cancel": "İptal",
-    "save": "Kaydet"
+    "save": "Kaydet",
+    "ok": "Tamam"
+  },
+  "loading": {
+    "title": "Notaların çıkarılıyor",
+    "subtitle": "Bu işlem birkaç dakika sürebilir. Uygulamada kalabilir ya da sonra dönebilirsin.",
+    "stageQueued": "Sıraya alındı…",
+    "stageAnalyzing": "Notalar çıkarılıyor…",
+    "stageRendering": "Nota kağıdı hazırlanıyor…",
+    "stageDone": "Tamamlandı",
+    "failedTitle": "İşlem başarısız",
+    "failedBody": "Bir hata oluştu, lütfen tekrar deneyin."
   },
   "tabs": {
     "home": "Ana Sayfa",
@@ -48,7 +59,8 @@
     "autoRecordPrefix": "Kayıt",
     "downloadError": "İndirme hatası",
     "uploadError": "Yükleme hatası",
-    "analysisError": "Analiz hatası"
+    "analysisError": "Analiz hatası",
+    "failedRetryHint": "Bu iş tamamlanamadı. Lütfen tekrar deneyin."
   },
   "settings": {
     "title": "Ayarlar",
@@ -86,7 +98,9 @@
     "emptyText": "Ana sayfadan bir şarkı çıkardığında burada görünecek.",
     "deleteTitle": "Kaydı sil",
     "deleteMessage": "\"{{title}}\" silinsin mi?",
-    "deleteConfirm": "Sil"
+    "deleteConfirm": "Sil",
+    "processing": "İşleniyor…",
+    "failed": "Başarısız"
   },
   "date": {
     "justNow": "az önce",

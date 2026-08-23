@@ -2,7 +2,18 @@
   "common": {
     "error": "Error",
     "cancel": "Cancel",
-    "save": "Save"
+    "save": "Save",
+    "ok": "OK"
+  },
+  "loading": {
+    "title": "Extracting your notes",
+    "subtitle": "This may take a few minutes. You can stay here or come back later.",
+    "stageQueued": "Queued…",
+    "stageAnalyzing": "Extracting notes…",
+    "stageRendering": "Preparing sheet music…",
+    "stageDone": "Done",
+    "failedTitle": "Processing failed",
+    "failedBody": "Something went wrong, please try again."
   },
   "tabs": {
     "home": "Home",
@@ -48,7 +59,8 @@
     "autoRecordPrefix": "Recording",
     "downloadError": "Download error",
     "uploadError": "Upload error",
-    "analysisError": "Analysis error"
+    "analysisError": "Analysis error",
+    "failedRetryHint": "This job couldn't be completed. Please try again."
   },
   "settings": {
     "title": "Settings",
@@ -86,7 +98,9 @@
     "emptyText": "It will appear here once you convert a song from the home screen.",
     "deleteTitle": "Delete record",
     "deleteMessage": "Delete \"{{title}}\"?",
-    "deleteConfirm": "Delete"
+    "deleteConfirm": "Delete",
+    "processing": "Processing…",
+    "failed": "Failed"
   },
   "date": {
     "justNow": "just now",

@@ -40,6 +40,7 @@ function HistoryStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="HistoryMain" component={HistoryScreen} />
+      <Stack.Screen name="Loading" component={LoadingScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="Result" component={ResultScreen} />
     </Stack.Navigator>
   );
