@@ -15,6 +15,7 @@ import { useTheme } from "../theme/ThemeContext";
 import { INSTRUMENTS, API } from "../constants";
 import { saveJob, getJobs, jobToResultParams } from "../utils/storage";
 import { startTranscribe, reconcileProcessingJobs } from "../services/jobs";
+import { ensureNotifPermission } from "../services/notify";
 import { formatRelativeDate } from "../utils/date";
 
 // Kayit ayarlari. iOS -> GERCEK WAV (LINEARPCM). Android -> expo-audio WAV'i native
@@ -90,6 +91,7 @@ export default function HomeScreen({ navigation }) {
   // Eski bloklayan /transcription/transcribe cagrisi yerine 202 donen /transcribe kullanilir.
   const transcribeAndOpen = async (jobId, title, useDemucs = true) => {
     const songTitle = title || t("home.unknownSong");
+    ensureNotifPermission(); // iş biterken bildirim gönderebilmek için izni şimdi iste (fire-and-forget)
     const newJobId = await startTranscribe(jobId, selectedInstrument, useDemucs);
     // Notalarim'da hemen "İşleniyor..." gorunmesi icin processing kaydi (Loading ekrani done/failed'a gunceller).
     await saveJob({ jobId: newJobId, title: songTitle, instrument: selectedInstrument, status: "processing" });

@@ -6,6 +6,8 @@
 //     status: queued|running|done|failed ; done -> result = TranscribeResponse sekli.
 import { API } from "../constants";
 import { getJobs, saveJob } from "../utils/storage";
+import { notifyReady } from "./notify";
+import i18n from "../i18n";
 
 const BASE = API.BASE_URL;
 
@@ -84,6 +86,8 @@ export async function reconcileProcessingJobs() {
     if (!job) continue;
     if (job.status === "done") {
       await saveJob(resultToRecord(j.jobId, j, job.result));
+      // Bekleme ekranindan ayrilmis is bitti -> "Notaların hazır" bildirimi.
+      notifyReady(i18n.t("notif.readyTitle"), i18n.t("notif.readyBody", { title: j.title || "" }));
       changed = true;
     } else if (job.status === "failed") {
       await saveJob({ jobId: j.jobId, status: "failed" });

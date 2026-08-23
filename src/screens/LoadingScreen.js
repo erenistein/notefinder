@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeContext";
 import { getJob } from "../services/jobs";
+import { notifyReady } from "../services/notify";
 import { saveJob } from "../utils/storage";
 
 const POLL_MS = 5000;
@@ -53,12 +54,14 @@ export default function LoadingScreen({ navigation, route }) {
       tempo: r.tempo, key: r.key, totalNotes: r.total_notes,
       duration: r.duration_seconds, hasPdf: !!r.pdf_file, status: "done",
     });
+    // "Notaların hazır" yerel bildirimi (arka planda kalindiysa da haber olsun). Fire-and-forget.
+    notifyReady(t("notif.readyTitle"), t("notif.readyBody", { title: safeTitle }));
     navigation.replace("Result", {
       instrument, title: safeTitle, jobId,
       tempo: r.tempo, key: r.key, totalNotes: r.total_notes, duration: r.duration_seconds,
       pdfFile: r.pdf_file, midiFile: r.midi_file, notes: r.notes || [],
     });
-  }, [jobId, instrument, safeTitle, navigation]);
+  }, [jobId, instrument, safeTitle, navigation, t]);
 
   const handleFailed = useCallback(async (job) => {
     if (doneRef.current) return;

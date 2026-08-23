@@ -15,6 +15,10 @@
     "failedTitle": "Processing failed",
     "failedBody": "Something went wrong, please try again."
   },
+  "notif": {
+    "readyTitle": "Your notes are ready 🎵",
+    "readyBody": "Sheet music for \"{{title}}\" is ready."
+  },
   "tabs": {
     "home": "Home",
     "history": "My Notes"

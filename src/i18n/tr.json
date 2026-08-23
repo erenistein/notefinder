@@ -15,6 +15,10 @@
     "failedTitle": "İşlem başarısız",
     "failedBody": "Bir hata oluştu, lütfen tekrar deneyin."
   },
+  "notif": {
+    "readyTitle": "Notaların hazır 🎵",
+    "readyBody": "\"{{title}}\" için nota kağıdın hazır."
+  },
   "tabs": {
     "home": "Ana Sayfa",
     "history": "Notalarım"
