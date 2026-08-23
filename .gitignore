@@ -16,8 +16,9 @@ node_modules/
 # Test ciktilari (girdi gorselleri kalir, uretilenler haric)
 test_omr/out*
 
-# Loglar
+# Loglar + calisma-zamani (backend.log, backend.stop bayragi)
 *.log
+logs/
 
 # Gecici gelistirme scriptleri/ciktilari
 zz_*
