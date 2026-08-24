@@ -135,11 +135,11 @@ export default function HomeScreen({ navigation }) {
       if (fromCamera) {
         perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { Alert.alert(t("home.cameraPermTitle"), t("home.cameraPermBody")); return; }
-        result = await ImagePicker.launchCameraAsync({ quality: 1 });
+        result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 1 });
       } else {
         perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { Alert.alert(t("home.galleryPermTitle"), t("home.galleryPermBody")); return; }
-        result = await ImagePicker.launchImageLibraryAsync({ quality: 1 });
+        result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 1 });
       }
       if (result.canceled) return;
       const asset = result.assets && result.assets[0];
