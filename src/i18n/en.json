@@ -83,7 +83,11 @@
     "processingBar": "Processing · {{progress}}% — tap",
     "activeJobTitle": "A conversion is in progress",
     "activeJobBody": "A conversion is already running. Wait for it to finish or return to it.",
-    "goToActive": "Return to it"
+    "goToActive": "Return to it",
+    "photoCropReminderTitle": "Frame only the notes",
+    "photoCropReminderBody": "Make sure the photo contains only the sheet music. Crop it in your gallery beforehand if needed.",
+    "lowResTitle": "Low resolution",
+    "lowResBody": "The photo is low resolution; the result may be weak."
   },
   "settings": {
     "title": "Settings",

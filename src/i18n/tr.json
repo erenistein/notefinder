@@ -83,7 +83,11 @@
     "processingBar": "İşleniyor · %{{progress}} — dokun",
     "activeJobTitle": "Bir dönüşüm sürüyor",
     "activeJobBody": "Bir dönüşüm zaten sürüyor. Bitmesini bekle ya da ona dön.",
-    "goToActive": "Ona dön"
+    "goToActive": "Ona dön",
+    "photoCropReminderTitle": "Sadece notayı çerçevele",
+    "photoCropReminderBody": "Fotoğrafın sadece nota kısmını içerdiğinden emin ol. Gerekirse galerinde önceden kırp.",
+    "lowResTitle": "Düşük çözünürlük",
+    "lowResBody": "Fotoğraf düşük çözünürlüklü, sonuç zayıf olabilir."
   },
   "settings": {
     "title": "Ayarlar",

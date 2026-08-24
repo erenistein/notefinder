@@ -150,20 +150,51 @@ export default function HomeScreen({ navigation }) {
   const pickPhoto = async (fromCamera) => {
     if (!requireInstrument()) return;
     if (await checkActiveJob()) return;
+    // iOS'ta allowsEditing KARE (1:1) kirpma dayatip dikey nota sayfasini kesiyordu (480x640 -> 383x384 kare,
+    // staves'in ~%75'i + cozunurluk kaybi). iOS'ta KAPALI (kirpmayi kullanici galeride yapsin); Android'de
+    // serbest-oran kirpici oldugu icin acik. exif/base64/coklu-secim gereksiz -> kapali.
+    const opts = {
+      allowsEditing: Platform.OS === "android",
+      allowsMultipleSelection: false,
+      exif: false,
+      base64: false,
+      quality: 1,
+    };
     try {
       let perm, result;
       if (fromCamera) {
         perm = await ImagePicker.requestCameraPermissionsAsync();
         if (!perm.granted) { Alert.alert(t("home.cameraPermTitle"), t("home.cameraPermBody")); return; }
-        result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 1 });
+        result = await ImagePicker.launchCameraAsync(opts);
       } else {
         perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!perm.granted) { Alert.alert(t("home.galleryPermTitle"), t("home.galleryPermBody")); return; }
-        result = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, quality: 1 });
+        result = await ImagePicker.launchImageLibraryAsync(opts);
       }
       if (result.canceled) return;
       const asset = result.assets && result.assets[0];
       if (!asset || !asset.uri) return;
+
+      // iOS: kirpma yok -> sadece notayi cerceveleme hatirlatmasi (onaylamazsa vazgec)
+      if (Platform.OS === "ios") {
+        const ok = await new Promise((resolve) => {
+          Alert.alert(t("home.photoCropReminderTitle"), t("home.photoCropReminderBody"), [
+            { text: t("common.cancel"), style: "cancel", onPress: () => resolve(false) },
+            { text: t("common.ok"), onPress: () => resolve(true) },
+          ], { cancelable: false });
+        });
+        if (!ok) return;
+      }
+
+      // Dusuk cozunurluk UYARISI (engellemez -> onaylayinca devam eder)
+      if (asset.width && asset.width < 1000) {
+        await new Promise((resolve) => {
+          Alert.alert(t("home.lowResTitle"), t("home.lowResBody"), [
+            { text: t("common.ok"), onPress: () => resolve() },
+          ], { cancelable: false });
+        });
+      }
+
       await processPhoto(asset);
     } catch (e) {
       console.warn("Foto secme hatasi:", e);
