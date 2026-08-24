@@ -64,7 +64,22 @@
     "downloadError": "Download error",
     "uploadError": "Upload error",
     "analysisError": "Analysis error",
-    "failedRetryHint": "This job couldn't be completed. Please try again."
+    "failedRetryHint": "This job couldn't be completed. Please try again.",
+    "instrumentSection": "Instrument",
+    "audioCardTitle": "From audio",
+    "photoCardTitle": "From a sheet photo",
+    "photoTake": "Take photo",
+    "photoPick": "Choose from gallery",
+    "photoHint": "High accuracy from printed sheet music. May take 5-7 minutes; crop just the notes.",
+    "photoJobTitle": "Sheet photo",
+    "stepUploadingPhoto": "Uploading photo...",
+    "cameraPermTitle": "Camera permission required",
+    "cameraPermBody": "Taking a sheet photo needs camera access. You can grant it from device settings.",
+    "galleryPermTitle": "Gallery permission required",
+    "galleryPermBody": "Choosing a sheet photo needs gallery access. You can grant it from device settings.",
+    "selectInstrumentTitle": "Select an instrument",
+    "selectInstrumentBody": "Please pick an instrument to continue.",
+    "noConversionsForInstrument": "No conversions for this instrument"
   },
   "settings": {
     "title": "Settings",

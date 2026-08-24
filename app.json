@@ -32,6 +32,13 @@
           "microphonePermission": "NoteFindr çaldığınız müziği kaydedip notaya dönüştürmek için mikrofona erişir."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NoteFindr nota fotoğrafınızı seçebilmek için galeriye erişir.",
+          "cameraPermission": "NoteFindr nota sayfanızın fotoğrafını çekebilmek için kameraya erişir."
+        }
+      ],
       "expo-localization"
     ]
   }

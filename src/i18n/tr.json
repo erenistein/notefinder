@@ -64,7 +64,22 @@
     "downloadError": "İndirme hatası",
     "uploadError": "Yükleme hatası",
     "analysisError": "Analiz hatası",
-    "failedRetryHint": "Bu iş tamamlanamadı. Lütfen tekrar deneyin."
+    "failedRetryHint": "Bu iş tamamlanamadı. Lütfen tekrar deneyin.",
+    "instrumentSection": "Enstrüman",
+    "audioCardTitle": "Sesten nota",
+    "photoCardTitle": "Nota fotoğrafından",
+    "photoTake": "Fotoğraf çek",
+    "photoPick": "Galeriden seç",
+    "photoHint": "Basılı notadan yüksek doğruluk. İşlem 5-7 dakika sürebilir; sadece notaları kırpın.",
+    "photoJobTitle": "Nota fotoğrafı",
+    "stepUploadingPhoto": "Fotoğraf yükleniyor...",
+    "cameraPermTitle": "Kamera izni gerekli",
+    "cameraPermBody": "Nota fotoğrafı çekmek için kamera iznine ihtiyaç var. Cihaz ayarlarından izin verebilirsin.",
+    "galleryPermTitle": "Galeri izni gerekli",
+    "galleryPermBody": "Galeriden nota fotoğrafı seçmek için erişim iznine ihtiyaç var. Cihaz ayarlarından izin verebilirsin.",
+    "selectInstrumentTitle": "Enstrüman seç",
+    "selectInstrumentBody": "Devam etmek için önce bir enstrüman seç.",
+    "noConversionsForInstrument": "Bu enstrümanda dönüşüm yok"
   },
   "settings": {
     "title": "Ayarlar",

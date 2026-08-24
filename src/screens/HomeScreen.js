@@ -10,11 +10,12 @@ import {
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
 } from "expo-audio";
+import * as ImagePicker from "expo-image-picker";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeContext";
 import { INSTRUMENTS, API } from "../constants";
 import { saveJob, getJobs, jobToResultParams } from "../utils/storage";
-import { startTranscribe, reconcileProcessingJobs } from "../services/jobs";
+import { startTranscribe, startOmr, reconcileProcessingJobs } from "../services/jobs";
 import { ensureNotifPermission } from "../services/notify";
 import { formatRelativeDate } from "../utils/date";
 
@@ -41,9 +42,9 @@ export default function HomeScreen({ navigation }) {
   const { colors } = useTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [url, setUrl] = useState("");
-  const [selectedInstrument, setSelectedInstrument] = useState("piano");
+  // Enstruman SECIMSIZ baslar (null) -> "hicbir sey secmezse hepsi gozuksun". Donusum icin secim ZORUNLU.
+  const [selectedInstrument, setSelectedInstrument] = useState(null);
   // Link akisi: kayitta ritim bolumu (davul/bas) var mi? -> demucs karari.
-  // Varsayilan true (YouTube muziginin cogu produksiyonlu, davul/basli sarki).
   const [isFullSong, setIsFullSong] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
@@ -55,7 +56,6 @@ export default function HomeScreen({ navigation }) {
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [recordName, setRecordName] = useState("");
   const [pendingUri, setPendingUri] = useState(null);
-  // "Son dönüştürmeler" artık tek kaynaktan (AsyncStorage) okunuyor - RAM history kaldırıldı.
   const [jobs, setJobs] = useState([]);
 
   const loadJobs = useCallback(async () => {
@@ -64,7 +64,6 @@ export default function HomeScreen({ navigation }) {
     setJobs(await getJobs());
   }, []);
 
-  // Ana sayfaya her odaklanildiginda tazele (yeni dönüştürme dönünce güncel görünsün).
   useFocusEffect(
     useCallback(() => {
       loadJobs();
@@ -80,26 +79,32 @@ export default function HomeScreen({ navigation }) {
     } else { pulseAnim.setValue(1); }
   }, [isRecording]);
 
-  // Otomatik kayit ismi (isim verilmezse / iptal edilirse)
   const autoRecordName = () => {
     const d = new Date();
     const p = (n) => String(n).padStart(2, "0");
     return `${t("home.autoRecordPrefix")} ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}`;
   };
 
-  // Ortak: job_id -> ASYNC transcribe baslat -> "processing" kaydi sakla -> Loading ekranina gec (poll orada).
-  // Eski bloklayan /transcription/transcribe cagrisi yerine 202 donen /transcribe kullanilir.
+  // Donusum baslatmadan once enstruman secili mi? Degilse uyar ve akisi durdur.
+  const requireInstrument = () => {
+    if (!selectedInstrument) {
+      Alert.alert(t("home.selectInstrumentTitle"), t("home.selectInstrumentBody"));
+      return false;
+    }
+    return true;
+  };
+
+  // Ortak: job_id -> ASYNC transcribe baslat -> "processing" kaydi sakla -> Loading ekranina gec.
   const transcribeAndOpen = async (jobId, title, useDemucs = true) => {
     const songTitle = title || t("home.unknownSong");
-    ensureNotifPermission(); // iş biterken bildirim gönderebilmek için izni şimdi iste (fire-and-forget)
+    ensureNotifPermission();
     const newJobId = await startTranscribe(jobId, selectedInstrument, useDemucs);
-    // Notalarim'da hemen "İşleniyor..." gorunmesi icin processing kaydi (Loading ekrani done/failed'a gunceller).
     await saveJob({ jobId: newJobId, title: songTitle, instrument: selectedInstrument, status: "processing" });
-    setLoading(false); // Home inline gostergesini kapat; bekleme ekrani devraliyor
+    setLoading(false);
     navigation.navigate("Loading", { jobId: newJobId, instrument: selectedInstrument, title: songTitle });
   };
 
-  // Kaydı yükle (WAV, multipart 'file') + transcribe. Yükleme göstergesi açık, hata yönetimli.
+  // Kaydi yukle (WAV) + transcribe.
   const processRecording = async (uri, name) => {
     setLoading(true);
     try {
@@ -112,25 +117,73 @@ export default function HomeScreen({ navigation }) {
         throw new Error(err.detail || t("home.uploadError"));
       }
       const upData = await upRes.json();
-      // Mikrofon kaydı SOLO -> demucs atla (demucs solo sinyali zayıflatıyor: 27 nota -> 9).
+      // Mikrofon kaydi SOLO -> demucs atla.
       await transcribeAndOpen(upData.job_id, name, false);
       setLoading(false);
     } catch (e) {
       setLoading(false);
-      console.warn("Kayıt işleme hatası:", e);
-      // Backend'in anlamli mesajini goster (orn. "Kayıtta yeterli müzik algılanamadı...")
+      console.warn("Kayit isleme hatasi:", e);
       Alert.alert(t("home.recordProcessFailTitle"), e?.message || t("home.recordProcessFailBody"));
     }
   };
 
-  // Durdurulan kayda isim sor — iOS + Android ortak Modal. TextInput otomatik isimle ön-dolu.
+  // OMR: kamera/galeriden nota fotografi -> upload -> startOmr -> Loading ekrani (poll orada).
+  const pickPhoto = async (fromCamera) => {
+    if (!requireInstrument()) return;
+    try {
+      let perm, result;
+      if (fromCamera) {
+        perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) { Alert.alert(t("home.cameraPermTitle"), t("home.cameraPermBody")); return; }
+        result = await ImagePicker.launchCameraAsync({ quality: 1 });
+      } else {
+        perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) { Alert.alert(t("home.galleryPermTitle"), t("home.galleryPermBody")); return; }
+        result = await ImagePicker.launchImageLibraryAsync({ quality: 1 });
+      }
+      if (result.canceled) return;
+      const asset = result.assets && result.assets[0];
+      if (!asset || !asset.uri) return;
+      await processPhoto(asset);
+    } catch (e) {
+      console.warn("Foto secme hatasi:", e);
+      Alert.alert(t("common.error"), e?.message || "");
+    }
+  };
+
+  const processPhoto = async (asset) => {
+    setLoading(true);
+    try {
+      setLoadingStep(t("home.stepUploadingPhoto"));
+      const mime = asset.mimeType || "image/jpeg";
+      const ext = mime.includes("png") ? "png" : "jpg";
+      const form = new FormData();
+      form.append("file", { uri: asset.uri, name: `nota.${ext}`, type: mime });
+      const upRes = await fetch(`${API.BASE_URL}/api/v1/audio/upload`, { method: "POST", body: form });
+      if (!upRes.ok) {
+        const err = await upRes.json().catch(() => ({}));
+        throw new Error(err.detail || t("home.uploadError"));
+      }
+      const upData = await upRes.json();
+      ensureNotifPermission();
+      const newJobId = await startOmr(upData.job_id, selectedInstrument);
+      const title = t("home.photoJobTitle");
+      await saveJob({ jobId: newJobId, title, instrument: selectedInstrument, status: "processing" });
+      setLoading(false);
+      navigation.navigate("Loading", { jobId: newJobId, instrument: selectedInstrument, title });
+    } catch (e) {
+      setLoading(false);
+      console.warn("Foto isleme hatasi:", e);
+      Alert.alert(t("common.error"), e?.message || t("home.uploadError"));
+    }
+  };
+
   const openNameModal = (uri) => {
     setPendingUri(uri);
     setRecordName(autoRecordName());
     setNameModalVisible(true);
   };
 
-  // "Kaydet": yazılan (boşsa otomatik) isimle işle.
   const confirmName = () => {
     const uri = pendingUri;
     const name = recordName.trim() || autoRecordName();
@@ -140,7 +193,6 @@ export default function HomeScreen({ navigation }) {
     if (uri) processRecording(uri, name);
   };
 
-  // "İptal": kaydı AT (işleme), modalı temizle.
   const cancelName = () => {
     setNameModalVisible(false);
     setPendingUri(null);
@@ -158,15 +210,16 @@ export default function HomeScreen({ navigation }) {
         await recorder.stop();
         uri = recorder.uri;
       } catch (e) {
-        console.warn("Kayıt durdurma hatası:", e);
+        console.warn("Kayit durdurma hatasi:", e);
       }
       if (uri) {
-        openNameModal(uri); // isim modalını aç -> Kaydet: upload (WAV) -> transcribe -> Result
+        openNameModal(uri);
       } else {
         Alert.alert(t("common.error"), t("home.recordFileNotFound"));
       }
     } else {
-      // --- BAŞLAT ---
+      // --- BASLAT ---
+      if (!requireInstrument()) return;
       try {
         const perm = await requestRecordingPermissionsAsync();
         if (!perm.granted) {
@@ -179,7 +232,7 @@ export default function HomeScreen({ navigation }) {
         setIsRecording(true);
         timerRef.current = setInterval(() => setRecordTime((sec) => sec + 1), 1000);
       } catch (e) {
-        console.warn("Kayıt başlatma hatası:", e);
+        console.warn("Kayit baslatma hatasi:", e);
         Alert.alert(t("common.error"), t("home.recordStartError", { error: e?.message || "" }));
       }
     }
@@ -190,9 +243,9 @@ export default function HomeScreen({ navigation }) {
       Alert.alert(t("common.error"), t("home.errorEmptyLink"));
       return;
     }
+    if (!requireInstrument()) return;
     setLoading(true);
     try {
-      // Adım 1: Ses indir
       setLoadingStep(t("home.stepDownloading"));
       const downloadRes = await fetch(`${API.BASE_URL}/api/v1/audio/from-link`, {
         method: "POST",
@@ -204,8 +257,6 @@ export default function HomeScreen({ navigation }) {
         throw new Error(err.detail || t("home.downloadError"));
       }
       const downloadData = await downloadRes.json();
-
-      // Adım 2: ASYNC transcribe başlat -> Loading ekranı (ilerleme orada poll edilir)
       await transcribeAndOpen(downloadData.job_id, downloadData.title, isFullSong);
     } catch (e) {
       setLoading(false);
@@ -215,7 +266,6 @@ export default function HomeScreen({ navigation }) {
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
-  // Liste ogesine dokununca: processing -> bekleme ekranina don; failed -> uyari; done -> Result.
   const openJob = (item) => {
     if (item.status === "processing") {
       navigation.navigate("Loading", { jobId: item.jobId, instrument: item.instrument, title: item.title });
@@ -226,8 +276,12 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // Kayit sirasinda VE isim modali aciktayken enstruman degistirilemez (transcribe henuz olmadi).
+  // Enstruman degistirilemez durum (kayit/isim modali aktifken)
   const instrumentsLocked = isRecording || nameModalVisible;
+  // Enstruman secilmedikce donusum butonlari dim (uyari yine de basinca cikar)
+  const flowDim = !selectedInstrument;
+  // "Son donusturmeler" enstrumana gore filtrele (secim yoksa hepsi)
+  const filteredJobs = selectedInstrument ? jobs.filter((j) => j.instrument === selectedInstrument) : jobs;
 
   if (loading) {
     return (
@@ -251,80 +305,101 @@ export default function HomeScreen({ navigation }) {
           <Text style={s.brand}>NOTEFINDER</Text>
           <Text style={s.title}>{t("home.title")}</Text>
         </View>
-        <View style={s.section}>
+
+        {/* Enstruman secici — iki akisin DISINDA, tek yerde (ustte) */}
+        <View style={s.selectorBlock}>
+          <Text style={s.sectionTitle}>{t("home.instrumentSection")}</Text>
+          <View style={[s.instRow, instrumentsLocked && { opacity: 0.4 }]}>
+            {INSTRUMENTS.map((inst) => {
+              const active = selectedInstrument === inst.id;
+              return (
+                <TouchableOpacity key={inst.id} style={[s.instBtn, active && { backgroundColor: inst.color, borderColor: inst.color }]} onPress={() => setSelectedInstrument(inst.id)} disabled={instrumentsLocked} activeOpacity={0.8}>
+                  <Text style={s.instIcon}>{inst.icon}</Text>
+                  <Text style={[s.instName, active && { color: colors.white }]}>{t(`instruments.${inst.id}`)}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* KART 1: Sesten nota (link + tam/sade + mikrofon) */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>🎧 {t("home.audioCardTitle")}</Text>
           <Text style={s.label}>{t("home.linkLabel")}</Text>
           <View style={s.inputRow}>
             <TextInput style={s.input} value={url} onChangeText={setUrl} placeholder="https://youtube.com/watch?v=..." placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} />
-            <TouchableOpacity style={[s.sendBtn, !url.trim() && { opacity: 0.5 }]} onPress={handleSubmitLink} disabled={!url.trim()}>
+            <TouchableOpacity style={[s.sendBtn, (!url.trim() || flowDim) && { opacity: 0.5 }]} onPress={handleSubmitLink} disabled={!url.trim()} activeOpacity={0.8}>
               <Text style={s.sendBtnText}>→</Text>
             </TouchableOpacity>
           </View>
           <Text style={[s.fullSongTitle, instrumentsLocked && { opacity: 0.4 }]}>{t("home.contentQuestion")}</Text>
           <View style={[s.fullSongRow, instrumentsLocked && { opacity: 0.4 }]}>
-            <TouchableOpacity
-              style={[s.fullSongBtn, isFullSong && s.fullSongBtnActive]}
-              onPress={() => setIsFullSong(true)}
-              disabled={instrumentsLocked}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={[s.fullSongBtn, isFullSong && s.fullSongBtnActive]} onPress={() => setIsFullSong(true)} disabled={instrumentsLocked} activeOpacity={0.8}>
               <Text style={[s.fullSongName, isFullSong && { color: colors.white }]}>{t("home.fullSong")}</Text>
               <Text style={[s.fullSongSub, isFullSong && { color: colors.white }]}>{t("home.fullSongSub")}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.fullSongBtn, !isFullSong && s.fullSongBtnActive]}
-              onPress={() => setIsFullSong(false)}
-              disabled={instrumentsLocked}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={[s.fullSongBtn, !isFullSong && s.fullSongBtnActive]} onPress={() => setIsFullSong(false)} disabled={instrumentsLocked} activeOpacity={0.8}>
               <Text style={[s.fullSongName, !isFullSong && { color: colors.white }]}>{t("home.simpleRecording")}</Text>
               <Text style={[s.fullSongSub, !isFullSong && { color: colors.white }]}>{t("home.simpleRecordingSub")}</Text>
             </TouchableOpacity>
           </View>
-          <Text style={s.fullSongHint}>{t("home.contentHint")}</Text>
-        </View>
-        <View style={s.divider}><View style={s.dividerLine} /><Text style={s.dividerText}>{t("home.orListen")}</Text><View style={s.dividerLine} /></View>
-        <View style={s.micSection}>
-          <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <TouchableOpacity style={[s.micButton, isRecording && s.micButtonRec]} onPress={toggleRecord} activeOpacity={0.7}>
-              <Text style={s.micIcon}>{isRecording ? "⏹" : "🎤"}</Text>
-            </TouchableOpacity>
-          </Animated.View>
-          <Text style={[s.micLabel, isRecording && { color: colors.danger, fontWeight: "700" }]}>{isRecording ? t("home.recording", { time: formatTime(recordTime) }) : t("home.listen")}</Text>
-        </View>
-        <View style={s.section}>
-          <Text style={s.label}>{t("home.instrumentLabel")}</Text>
-          <View style={[s.instRow, instrumentsLocked && { opacity: 0.4 }]}>
-            {INSTRUMENTS.map((inst) => (
-              <TouchableOpacity key={inst.id} style={[s.instBtn, selectedInstrument === inst.id && { backgroundColor: inst.color, borderColor: inst.color }]} onPress={() => setSelectedInstrument(inst.id)} disabled={instrumentsLocked} activeOpacity={0.7}>
-                <Text style={s.instIcon}>{inst.icon}</Text>
-                <Text style={[s.instName, selectedInstrument === inst.id && { color: colors.white }]}>{t(`instruments.${inst.id}`)}</Text>
+          <View style={s.divider}><View style={s.dividerLine} /><Text style={s.dividerText}>{t("home.orListen")}</Text><View style={s.dividerLine} /></View>
+          <View style={s.micSection}>
+            <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+              <TouchableOpacity style={[s.micButton, isRecording && s.micButtonRec, flowDim && !isRecording && { opacity: 0.5 }]} onPress={toggleRecord} activeOpacity={0.8}>
+                <Text style={s.micIcon}>{isRecording ? "⏹" : "🎤"}</Text>
               </TouchableOpacity>
-            ))}
+            </Animated.View>
+            <Text style={[s.micLabel, isRecording && { color: colors.danger, fontWeight: "700" }]}>{isRecording ? t("home.recording", { time: formatTime(recordTime) }) : t("home.listen")}</Text>
           </View>
-          <Text style={s.qualityHint}>{t("home.qualityHint")}</Text>
         </View>
+        <Text style={s.cardHint}>{t("home.qualityHint")}</Text>
+
+        {/* KART 2: Nota fotografindan (OMR) */}
+        <View style={s.card}>
+          <Text style={s.cardTitle}>📷 {t("home.photoCardTitle")}</Text>
+          <View style={s.photoRow}>
+            <TouchableOpacity style={[s.photoBtn, flowDim && { opacity: 0.5 }]} onPress={() => pickPhoto(true)} activeOpacity={0.8}>
+              <Text style={s.photoBtnIcon}>📷</Text>
+              <Text style={s.photoBtnLabel}>{t("home.photoTake")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[s.photoBtn, flowDim && { opacity: 0.5 }]} onPress={() => pickPhoto(false)} activeOpacity={0.8}>
+              <Text style={s.photoBtnIcon}>🖼️</Text>
+              <Text style={s.photoBtnLabel}>{t("home.photoPick")}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <Text style={s.cardHint}>{t("home.photoHint")}</Text>
+
+        {/* Son donusturmeler — enstrumana gore filtreli */}
         {jobs.length > 0 && (
-          <View style={s.section}>
-            <Text style={s.label}>{t("home.recentConversions")}</Text>
-            {jobs.slice(0, 5).map((item) => {
-              const inst = INSTRUMENTS.find((i) => i.id === item.instrument);
-              return (
-                <TouchableOpacity key={item.jobId} style={s.histItem} onPress={() => openJob(item)} activeOpacity={0.7}>
-                  <Text style={s.histIcon}>{inst?.icon || "🎵"}</Text>
-                  <View style={s.histInfo}>
-                    <Text style={s.histTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={s.histMeta}>{inst ? t(`instruments.${inst.id}`) : item.instrument} · {formatRelativeDate(item.createdAt)}</Text>
-                  </View>
-                  {item.status === "processing" ? (
-                    <Text style={s.histProcessing}>{t("history.processing")}</Text>
-                  ) : item.status === "failed" ? (
-                    <Text style={s.histFailed}>{t("history.failed")}</Text>
-                  ) : (
-                    <Text style={s.histArrow}>→</Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+          <View style={s.recentBlock}>
+            <Text style={s.sectionTitle}>
+              {t("home.recentConversions")}{selectedInstrument ? ` · ${t(`instruments.${selectedInstrument}`)}` : ""}
+            </Text>
+            {filteredJobs.length === 0 ? (
+              <Text style={s.emptyFilterText}>{t("home.noConversionsForInstrument")}</Text>
+            ) : (
+              filteredJobs.slice(0, 5).map((item) => {
+                const inst = INSTRUMENTS.find((i) => i.id === item.instrument);
+                return (
+                  <TouchableOpacity key={item.jobId} style={s.histItem} onPress={() => openJob(item)} activeOpacity={0.8}>
+                    <Text style={s.histIcon}>{inst?.icon || "🎵"}</Text>
+                    <View style={s.histInfo}>
+                      <Text style={s.histTitle} numberOfLines={1}>{item.title}</Text>
+                      <Text style={s.histMeta}>{inst ? t(`instruments.${inst.id}`) : item.instrument} · {formatRelativeDate(item.createdAt)}</Text>
+                    </View>
+                    {item.status === "processing" ? (
+                      <Text style={s.histProcessing}>{t("history.processing")}</Text>
+                    ) : item.status === "failed" ? (
+                      <Text style={s.histFailed}>{t("history.failed")}</Text>
+                    ) : (
+                      <Text style={s.histArrow}>→</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
         )}
       </ScrollView>
@@ -362,29 +437,54 @@ const makeStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg }, scroll: { padding: 20, paddingBottom: 30 },
   header: { alignItems: "center", paddingVertical: 20 }, brand: { fontSize: 11, letterSpacing: 4, color: c.textSecondary, fontWeight: "600" },
   settingsBtn: { position: "absolute", right: 0, top: 16, padding: 6, zIndex: 1 }, settingsIcon: { fontSize: 22 },
-  title: { fontSize: 24, fontWeight: "700", color: c.text, marginTop: 6 }, section: { marginBottom: 20 },
-  label: { fontSize: 12, color: c.textSecondary, marginBottom: 8, fontWeight: "500" }, inputRow: { flexDirection: "row", gap: 8 },
-  input: { flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, paddingHorizontal: 14, color: c.text, fontSize: 13 },
+  title: { fontSize: 24, fontWeight: "700", color: c.text, marginTop: 6 },
+
+  // Bolum basligi: kucuk caps, ikincil metin
+  sectionTitle: { fontSize: 11, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase", color: c.textSecondary, marginBottom: 10 },
+  selectorBlock: { marginBottom: 24 },
+  recentBlock: { marginTop: 8 },
+
+  // Kart: yuzey + kenarlik + hafif golge (iki temada da; dark'ta kenarlik, light'ta golge tanimlar)
+  card: {
+    backgroundColor: c.surface, borderRadius: 16, borderWidth: 1, borderColor: c.border, padding: 16, marginBottom: 8,
+    shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 2,
+  },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: c.text, marginBottom: 14 },
+  cardHint: { fontSize: 11, color: c.textMuted, lineHeight: 16, marginBottom: 24, paddingHorizontal: 2 },
+
+  label: { fontSize: 12, color: c.textSecondary, marginBottom: 8, fontWeight: "500" },
+  inputRow: { flexDirection: "row", gap: 8 },
+  input: { flex: 1, height: 46, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, paddingHorizontal: 14, color: c.text, fontSize: 13 },
   sendBtn: { width: 46, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: c.primary }, sendBtnText: { color: c.white, fontSize: 20, fontWeight: "700" },
-  divider: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 10 }, dividerLine: { flex: 1, height: 1, backgroundColor: c.border }, dividerText: { fontSize: 11, color: c.textMuted },
-  micSection: { alignItems: "center", marginVertical: 16 }, micButton: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: c.danger, alignItems: "center", justifyContent: "center" },
-  micButtonRec: { backgroundColor: c.danger + "26", borderColor: c.danger }, micIcon: { fontSize: 40 }, micLabel: { fontSize: 13, color: c.textSecondary, marginTop: 10 },
-  fullSongTitle: { fontSize: 12, color: c.textSecondary, marginTop: 14, marginBottom: 8, fontWeight: "500" },
+
+  divider: { flexDirection: "row", alignItems: "center", gap: 10, marginVertical: 16 }, dividerLine: { flex: 1, height: 1, backgroundColor: c.border }, dividerText: { fontSize: 11, color: c.textMuted },
+  micSection: { alignItems: "center", marginTop: 4 }, micButton: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: c.danger, alignItems: "center", justifyContent: "center", backgroundColor: c.bg },
+  micButtonRec: { backgroundColor: c.danger + "26", borderColor: c.danger }, micIcon: { fontSize: 38 }, micLabel: { fontSize: 13, color: c.textSecondary, marginTop: 10 },
+
+  fullSongTitle: { fontSize: 12, color: c.textSecondary, marginTop: 16, marginBottom: 8, fontWeight: "500" },
   fullSongRow: { flexDirection: "row", gap: 8 },
-  fullSongBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, alignItems: "center" },
+  fullSongBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, alignItems: "center" },
   fullSongBtnActive: { backgroundColor: c.primary, borderColor: c.primary },
   fullSongName: { fontSize: 13, fontWeight: "700", color: c.text },
   fullSongSub: { fontSize: 11, fontWeight: "500", color: c.textSecondary, marginTop: 2 },
-  fullSongHint: { fontSize: 11, color: c.textMuted, marginTop: 6 },
+
+  // Foto kart butonlari
+  photoRow: { flexDirection: "row", gap: 10 },
+  photoBtn: { flex: 1, paddingVertical: 18, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, alignItems: "center", gap: 6 },
+  photoBtnIcon: { fontSize: 26 }, photoBtnLabel: { fontSize: 12, fontWeight: "600", color: c.text },
+
   instRow: { flexDirection: "row", gap: 8 }, instBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface, alignItems: "center" },
   instIcon: { fontSize: 22, marginBottom: 4 }, instName: { fontSize: 11, fontWeight: "600", color: c.textSecondary },
-  qualityHint: { fontSize: 11, color: c.textMuted, lineHeight: 15, marginTop: 10 },
-  histItem: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 12, backgroundColor: c.surface, marginBottom: 8, gap: 12 },
+
+  emptyFilterText: { fontSize: 12, color: c.textMuted, paddingVertical: 10 },
+  histItem: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 12, backgroundColor: c.surface, marginBottom: 8, gap: 12, borderWidth: 1, borderColor: c.border },
   histIcon: { fontSize: 26 }, histInfo: { flex: 1 }, histTitle: { fontSize: 14, fontWeight: "600", color: c.text }, histMeta: { fontSize: 11, color: c.textSecondary, marginTop: 2 }, histArrow: { fontSize: 16, color: c.textMuted },
   histProcessing: { fontSize: 11, fontWeight: "700", color: c.primary }, histFailed: { fontSize: 11, fontWeight: "700", color: c.danger },
+
   loadingBox: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30 },
   loadingText: { fontSize: 16, fontWeight: "600", color: c.text, marginTop: 20 },
   loadingHint: { fontSize: 13, color: c.textSecondary, marginTop: 8 },
+
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 24 },
   modalCard: { width: "100%", maxWidth: 380, backgroundColor: c.surface, borderRadius: 16, borderWidth: 1, borderColor: c.border, padding: 20 },
   modalTitle: { fontSize: 17, fontWeight: "700", color: c.text },
