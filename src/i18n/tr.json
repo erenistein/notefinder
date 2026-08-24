@@ -73,6 +73,8 @@
     "photoHint": "Basılı notadan yüksek doğruluk. İşlem 5-7 dakika sürebilir; sadece notaları kırpın.",
     "photoJobTitle": "Nota fotoğrafı",
     "stepUploadingPhoto": "Fotoğraf yükleniyor...",
+    "stepUploadingPhotoSize": "Fotoğraf yükleniyor... ({{size}} MB)",
+    "uploadTimeout": "Yükleme zaman aşımına uğradı. Wi-Fi bağlantını kontrol edip tekrar dene.",
     "cameraPermTitle": "Kamera izni gerekli",
     "cameraPermBody": "Nota fotoğrafı çekmek için kamera iznine ihtiyaç var. Cihaz ayarlarından izin verebilirsin.",
     "galleryPermTitle": "Galeri izni gerekli",

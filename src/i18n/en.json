@@ -73,6 +73,8 @@
     "photoHint": "High accuracy from printed sheet music. May take 5-7 minutes; crop just the notes.",
     "photoJobTitle": "Sheet photo",
     "stepUploadingPhoto": "Uploading photo...",
+    "stepUploadingPhotoSize": "Uploading photo... ({{size}} MB)",
+    "uploadTimeout": "Upload timed out. Check your Wi-Fi connection and try again.",
     "cameraPermTitle": "Camera permission required",
     "cameraPermBody": "Taking a sheet photo needs camera access. You can grant it from device settings.",
     "galleryPermTitle": "Gallery permission required",

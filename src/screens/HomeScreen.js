@@ -11,6 +11,8 @@ import {
   setAudioModeAsync,
 } from "expo-audio";
 import * as ImagePicker from "expo-image-picker";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
+import { File as FSFile } from "expo-file-system";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeContext";
 import { INSTRUMENTS, API } from "../constants";
@@ -202,15 +204,49 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  // Upload ONCESI kucultme/format: uzun kenar > 2400 -> 2400'e olcekle (orani koru); her durumda
+  // JPEG %85 (HEIC gelirse de JPEG olur). Upload suresini + backend yukunu dusurur. Isleme hata
+  // verirse orijinali kullanir (engellemez). Doner: kullanilacak uri.
+  const prepareImage = async (asset) => {
+    const w = asset.width || 0, h = asset.height || 0;
+    const actions = [];
+    if (Math.max(w, h) > 2400) {
+      actions.push(w >= h ? { resize: { width: 2400 } } : { resize: { height: 2400 } });
+    }
+    try {
+      const out = await manipulateAsync(asset.uri, actions, { compress: 0.85, format: SaveFormat.JPEG });
+      return out.uri;
+    } catch (e) {
+      console.warn("Goruntu on-isleme atlandi:", e);
+      return asset.uri;
+    }
+  };
+
   const processPhoto = async (asset) => {
     setLoading(true);
     try {
       setLoadingStep(t("home.stepUploadingPhoto"));
-      const mime = asset.mimeType || "image/jpeg";
-      const ext = mime.includes("png") ? "png" : "jpg";
+      const uri = await prepareImage(asset);
+      // Yuklenecek dosya boyutunu goster
+      let sizeMB = null;
+      try { const sz = new FSFile(uri).size; if (sz) sizeMB = (sz / 1048576).toFixed(1); } catch (e) { /* boyut alinamadi */ }
+      setLoadingStep(sizeMB ? t("home.stepUploadingPhotoSize", { size: sizeMB }) : t("home.stepUploadingPhoto"));
+
       const form = new FormData();
-      form.append("file", { uri: asset.uri, name: `nota.${ext}`, type: mime });
-      const upRes = await fetch(`${API.BASE_URL}/api/v1/audio/upload`, { method: "POST", body: form });
+      form.append("file", { uri, name: "nota.jpg", type: "image/jpeg" });
+
+      // 120 sn timeout (AbortController) -> yavas Wi-Fi'da sonsuza kadar takilmasin
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
+      let upRes;
+      try {
+        upRes = await fetch(`${API.BASE_URL}/api/v1/audio/upload`, { method: "POST", body: form, signal: controller.signal });
+      } catch (e) {
+        if (e && e.name === "AbortError") throw new Error(t("home.uploadTimeout"));
+        throw e;
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!upRes.ok) {
         const err = await upRes.json().catch(() => ({}));
         throw new Error(err.detail || t("home.uploadError"));
