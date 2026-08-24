@@ -24,8 +24,9 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # Arka plan job sure tahminleri (kaba ilerleme cubugu icin)
 OMR_EST_SEC = 420        # oemer ~6-7 dk (ticker 84'e erken dayanmasin diye 7 dk)
-TRANSCRIBE_EST_SEC = 180  # demucs+basic-pitch ~3 dk
-TRANSCRIBE_TIMEOUT_SEC = 900  # transcribe job'i icin 15 dk sert ust sinir (takilirsa job failed)
+TRANSCRIBE_EST_SEC = 240   # demucs'lu tipik ~200-300 sn (ticker gercekci; 89'da erken takilmasin)
+DEMUCS_TIMEOUT = 1200      # demucs 20 dk sert timeout; asimda job FAILED (Turkce mesaj)
+TRANSCRIBE_TIMEOUT_SEC = 1800  # job backstop 30 dk (demucs kendi 20 dk timeout'undan sonra bir emniyet agi)
 
 app = FastAPI(title="NoteFindr API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -607,7 +608,7 @@ def separate_audio(wav_path, instrument="piano"):
                  "-o", output_dir,
                  "--filename", "{track}/{stem}.{ext}",
                  wav_path],
-                stdout=_dl, stderr=subprocess.STDOUT, timeout=600,
+                stdout=_dl, stderr=subprocess.STDOUT, timeout=DEMUCS_TIMEOUT,
             )
         print(f"Demucs bitti. Return code: {result.returncode}")
         base_dir = os.path.join(output_dir, "htdemucs", track_name)
@@ -640,8 +641,13 @@ def separate_audio(wav_path, instrument="piano"):
         
         print("Ayrilmis dosya bulunamadi, orijinal kullaniliyor")
         return wav_path
+    except subprocess.TimeoutExpired:
+        # 20 dk'yi asti -> SESSIZCE atlama; job'i anlamli Turkce mesajla BASARISIZ yap.
+        print(f"Demucs ZAMAN ASIMI ({DEMUCS_TIMEOUT}s) -> job basarisiz.")
+        raise RuntimeError("Ses ayrıştırma (demucs) çok uzun sürdü. Lütfen daha kısa bir parça deneyin.")
     except Exception as e:
-        print(f"Demucs hatasi: {e}")
+        # Diger demucs hatalari: zarif dus (orijinal wav ile devam et).
+        print(f"Demucs hatasi (atlaniyor): {e}")
         return wav_path
 
 # ─── LilyPond PDF ───
