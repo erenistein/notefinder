@@ -298,6 +298,8 @@ def quantize_notes(notes, tempo):
         ev = dict(group[0])
         ev["start"] = group[0]["start"]
         ev["midis"] = midis
+        ev["lilys"] = [g.get("lily") for g in members]  # OMR yazim tokenleri (ses akisinda None)
+        ev["disps"] = [g.get("disp") for g in members]  # OMR Do-Re-Mi yazimlari (ses akisinda None)
         ev["midi"] = midis[-1]  # temsil: en tiz nota (melodi)
         ev["duration"] = max(g["duration"] for g in group)
         ev["end"] = ev["start"] + ev["duration"]
@@ -694,21 +696,29 @@ def improve_hand_separation(notes, tempo):
 
     return dedupe(right_hand), dedupe(left_hand)
 
-def _pitch_token(midis, is_rest):
-    """Sure olmadan nota/akor/sus basligini uretir: 'r', 'cis', '<c e g>'."""
+def _pitch_token(midis, is_rest, lilys=None):
+    """Sure olmadan nota/akor/sus basligini uretir: 'r', 'cis', '<c e g>'.
+    lilys verilirse (OMR yazim sadakati) o LilyPond token'i (bes/ais...) MIDI'den turetilen
+    yerine kullanilir; yoksa/None ise MIDI'den (hep diyez) turetilir -> ses akisi AYNEN kalir."""
     if is_rest or not midis:
         return "r"
+    def one(idx, m):
+        if lilys and idx < len(lilys) and lilys[idx]:
+            return lilys[idx]
+        return midi_to_lily_pitch(m)
     if len(midis) == 1:
-        return midi_to_lily_pitch(midis[0])
-    return "<" + " ".join(midi_to_lily_pitch(m) for m in midis) + ">"
+        return one(0, midis[0])
+    return "<" + " ".join(one(i, m) for i, m in enumerate(midis)) + ">"
 
-def _note_label(midis):
+def _note_label(midis, disps=None):
     """Notanin/akorun altina basilacak Do-Re-Mi etiketi: _"Do" gibi (LilyPond TextScript).
-    Akorda tek isim = KOK (en pes) nota. Sabit Do (fixed-Do): NOTE_NAMES[midi%12], tondan
-    bagimsiz, hep diyez. Adim 1 sabit Turkce; dil secimi/toggle sonraki adimlarda.
-    Yalniz nota-basi token'a eklenir (sus/tie-devami cagirmaz)."""
+    Akorda tek isim = KOK (en pes) nota. disps verilirse (OMR) o yazim (Sib) kullanilir;
+    yoksa sabit-Do NOTE_NAMES[midi%12] (hep diyez, ses akisi AYNEN)."""
     if not midis:
         return ""
+    lo_idx = min(range(len(midis)), key=lambda k: midis[k])
+    if disps and lo_idx < len(disps) and disps[lo_idx]:
+        return '_"' + disps[lo_idx] + '"'
     return '_"' + NOTE_NAMES[min(midis) % 12] + '"'
 
 def split_units_to_durs(units):
@@ -795,7 +805,7 @@ def render_voice_measures(events, tempo, with_slurs=True):
             inner = []
             for e in events[i:i + 3]:
                 ms = e.get("midis") or [e["midi"]]
-                inner.append(_pitch_token(ms, False) + "8" + _note_label(ms))
+                inner.append(_pitch_token(ms, False, e.get("lilys")) + "8" + _note_label(ms, e.get("disps")))
             current.append("\\tuplet 3/2 { " + " ".join(inner) + " }")
             pos += 4
             i += 3
@@ -806,10 +816,10 @@ def render_voice_measures(events, tempo, with_slurs=True):
         ev = events[i]
         is_rest = ev.get("is_rest", False)
         midis = [] if is_rest else (ev.get("midis") or [ev["midi"]])
-        pitch = _pitch_token(midis, is_rest)
+        pitch = _pitch_token(midis, is_rest, None if is_rest else ev.get("lilys"))
         # Isim SADECE notanin ilk (nota-basi) token'ina; tie ile bolunen devam
         # parcalarina ve suslere yazilmaz (yoksa ayni nota iki kez isimlenir).
-        label = "" if is_rest else _note_label(midis)
+        label = "" if is_rest else _note_label(midis, ev.get("disps"))
         named = False
         units = max(1, int(round(ev["duration"] / grid)))
         while units > 0:

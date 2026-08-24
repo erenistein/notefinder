@@ -27,6 +27,31 @@ MIN_SIDE = 350
 EDGE_WHITE_MIN = 70.0
 
 
+# ── music21 pitch -> LilyPond token + Turkce yazim (bemol/diyez KORUNUR) ─────────────
+_TR_STEP = {"C": "Do", "D": "Re", "E": "Mi", "F": "Fa", "G": "Sol", "A": "La", "B": "Si"}
+_ACC_LILY = {0: "", 1: "is", -1: "es", 2: "isis", -2: "eses"}   # LilyPond Dutch: is/es
+_ACC_DISP = {0: "", 1: "#", -1: "b", 2: "##", -2: "bb"}
+
+
+def _oct_marks(octv):
+    """LilyPond mutlak oktav isaretleri (mevcut midi_to_lily_pitch ile ayni konvansiyon)."""
+    if octv >= 4:
+        return "'" * (octv - 3)
+    if octv < 3:
+        return "," * (3 - octv)
+    return ""
+
+
+def _pitch_tokens(p):
+    """music21 pitch -> (lily_token, disp_isim, disp_isim+oktav). Ornek: B-4 -> ('bes\\'', 'Sib', 'Sib4')."""
+    alter = int(p.alter) if p.alter else 0
+    step = p.step  # 'C'..'B'
+    octv = p.octave if p.octave is not None else 4
+    lily = step.lower() + _ACC_LILY.get(alter, "") + _oct_marks(octv)
+    disp = _TR_STEP.get(step, step) + _ACC_DISP.get(alter, "")
+    return lily, disp, disp + str(octv)
+
+
 def staff_metrics(path):
     """Ucuz metrikler: (min_kenar, porte_cizgi_grubu_sayisi, kenar_beyazlik_yuzdesi).
     Porte: grayscale + adaptive threshold + yatay morfolojik acma (kernel = %40 genislik).
@@ -127,8 +152,8 @@ def omr_to_notes(image_path, job_id, progress_cb=None):
     """Foto -> (notes, tempo, key_name, key_idx, key_is_major, cached).
     progress_cb(pct, msg) opsiyonel ilerleme bildirimi (arka plan job icin).
     read_midi_notes'u ANA venv'den lazy import eder (dairesel import'u onler)."""
-    from music21 import converter, tempo as m21tempo
-    from main import read_midi_notes, NOTE_NAMES  # lazy -> dairesel import yok
+    from music21 import converter, tempo as m21tempo, key as m21key
+    from main import NOTE_NAMES  # lazy -> dairesel import yok
     import omr_cache
 
     def cb(p, m=None):
@@ -164,28 +189,67 @@ def omr_to_notes(image_path, job_id, progress_cb=None):
     for mk in marks:
         if mk.number:
             bpm = int(round(mk.number)); break
-    # MIDI'nin saniye hesabi bu tempoya otursun diye basa metronom ekle
     if not marks:
         score.insert(0, m21tempo.MetronomeMark(number=bpm))
 
-    # 5) key: analiz (backend detect_key ile ayni Krumhansl ailesi); yoksa Do major
+    # 4b) TEKRARLARI AC (repeat/volta/dolap) -> notalar lineer sirada, son satir kaybolmasin.
+    #     Basarisiz olursa ORIJINAL skorla devam (nota kaybetmemek onceligi).
+    try:
+        expanded = score.expandRepeats()
+        if expanded is not None and list(expanded.recurse().notes):
+            score = expanded
+            print("OMR: repeat/volta acildi (expandRepeats).")
+    except Exception as e:
+        print(f"OMR: expandRepeats atlandi ({str(e)[:120]}); olculer lineer aynen kullanilacak.")
+
+    # 5) key: ONCE MusicXML'deki anahtar (oemer yazdiysa); YOKSA analiz (donanim/isaret yoksa fallback)
     key_idx, key_is_major = 0, True
     try:
-        k = score.analyze("key")
-        key_idx = int(k.tonic.pitchClass)          # 0=Do/C .. 11=Si/B
-        key_is_major = (k.mode == "major")
+        kobj = score.recurse().getElementsByClass(m21key.Key).first()
+        if kobj is None:
+            ksig = score.recurse().getElementsByClass(m21key.KeySignature).first()
+            if ksig is not None:
+                kobj = ksig.asKey("major")   # yalniz signature -> major varsay
+        if kobj is None:
+            kobj = score.analyze("key")      # son care: Krumhansl analizi
+        key_idx = int(kobj.tonic.pitchClass)  # 0=Do/C .. 11=Si/B
+        key_is_major = (kobj.mode == "major")
     except Exception:
         pass
     key_name = NOTE_NAMES[key_idx] + (" Major" if key_is_major else " Minor")
 
-    # 6) MusicXML -> MIDI (outputs/{job}_full.mid) -> mevcut read_midi_notes
+    # 6) MIDI'yi indirme icin YINE yaz (skordan), AMA notes listesi DOGRUDAN music21 skorundan
+    #    uretilir (MIDI->numaradan degil) -> yazim (Si♭ vs La#) korunur.
     midi_path = os.path.join(OUTPUT_DIR, f"{job_id}_full.mid")
     try:
         score.write("midi", fp=midi_path)
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"MIDI'ye cevrilemedi: {str(e)[:120]}")
+        print(f"OMR: indirme MIDI'si yazilamadi ({str(e)[:120]}).")
 
-    notes = read_midi_notes(midi_path, monophonic=False, midi_range=None)
+    beat_sec = 60.0 / max(1, bpm)
+    notes = []
+    for el in score.flatten().notes:  # Note + Chord (akorlar tek tek perdeye acilir)
+        try:
+            start = float(el.offset) * beat_sec
+            dur = float(el.duration.quarterLength) * beat_sec
+        except Exception:
+            continue
+        if dur <= 0:
+            continue
+        vel = 90
+        try:
+            if el.volume is not None and el.volume.velocity:
+                vel = int(el.volume.velocity)
+        except Exception:
+            pass
+        for p in el.pitches:
+            lily, disp, name = _pitch_tokens(p)
+            notes.append({
+                "note": name, "midi": int(p.midi), "lily": lily, "disp": disp,
+                "start": round(start, 4), "duration": round(dur, 4), "end": round(start + dur, 4),
+                "velocity": vel,
+            })
+    notes.sort(key=lambda x: (x["start"], x["midi"]))
     if not notes:
         raise HTTPException(status_code=422, detail="Fotograftan gecerli nota cikmadi (bos sonuc). Daha net bir foto deneyin.")
 

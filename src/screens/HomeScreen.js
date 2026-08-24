@@ -189,7 +189,7 @@ export default function HomeScreen({ navigation }) {
       }
 
       // Dusuk cozunurluk UYARISI (engellemez -> onaylayinca devam eder)
-      if (asset.width && asset.width < 1000) {
+      if (asset.width && asset.width < 700) {
         await new Promise((resolve) => {
           Alert.alert(t("home.lowResTitle"), t("home.lowResBody"), [
             { text: t("common.ok"), onPress: () => resolve() },
