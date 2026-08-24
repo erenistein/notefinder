@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { useTheme } from "../theme/ThemeContext";
 import { INSTRUMENTS, API } from "../constants";
 import { saveJob, getJobs, jobToResultParams } from "../utils/storage";
-import { startTranscribe, startOmr, reconcileProcessingJobs } from "../services/jobs";
+import { startTranscribe, startOmr, getJob, reconcileProcessingJobs } from "../services/jobs";
 import { ensureNotifPermission } from "../services/notify";
 import { formatRelativeDate } from "../utils/date";
 
@@ -94,6 +94,25 @@ export default function HomeScreen({ navigation }) {
     return true;
   };
 
+  // Tek aktif is sinirlamasi: sürüyor bir job varsa yeni donusum baslatilamaz (frontend-only).
+  // Doner: true = engellendi (uyari gosterildi). false = devam edilebilir.
+  const checkActiveJob = async () => {
+    const list = await getJobs();
+    const active = list.find((j) => j.status === "processing");
+    if (!active) return false;
+    // storage bayat olabilir -> gercekten suruyor mu backend'den dogrula
+    const job = await getJob(active.jobId);
+    if (job && (job.status === "done" || job.status === "failed")) {
+      await reconcileProcessingJobs().catch(() => {});
+      return false; // aslinda bitmis -> engelleme yok
+    }
+    Alert.alert(t("home.activeJobTitle"), t("home.activeJobBody"), [
+      { text: t("common.cancel"), style: "cancel" },
+      { text: t("home.goToActive"), onPress: () => navigation.navigate("Loading", { jobId: active.jobId, instrument: active.instrument, title: active.title }) },
+    ]);
+    return true; // engellendi
+  };
+
   // Ortak: job_id -> ASYNC transcribe baslat -> "processing" kaydi sakla -> Loading ekranina gec.
   const transcribeAndOpen = async (jobId, title, useDemucs = true) => {
     const songTitle = title || t("home.unknownSong");
@@ -130,6 +149,7 @@ export default function HomeScreen({ navigation }) {
   // OMR: kamera/galeriden nota fotografi -> upload -> startOmr -> Loading ekrani (poll orada).
   const pickPhoto = async (fromCamera) => {
     if (!requireInstrument()) return;
+    if (await checkActiveJob()) return;
     try {
       let perm, result;
       if (fromCamera) {
@@ -220,6 +240,7 @@ export default function HomeScreen({ navigation }) {
     } else {
       // --- BASLAT ---
       if (!requireInstrument()) return;
+      if (await checkActiveJob()) return;
       try {
         const perm = await requestRecordingPermissionsAsync();
         if (!perm.granted) {
@@ -244,6 +265,7 @@ export default function HomeScreen({ navigation }) {
       return;
     }
     if (!requireInstrument()) return;
+    if (await checkActiveJob()) return;
     setLoading(true);
     try {
       setLoadingStep(t("home.stepDownloading"));

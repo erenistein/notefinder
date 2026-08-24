@@ -79,7 +79,11 @@
     "galleryPermBody": "Choosing a sheet photo needs gallery access. You can grant it from device settings.",
     "selectInstrumentTitle": "Select an instrument",
     "selectInstrumentBody": "Please pick an instrument to continue.",
-    "noConversionsForInstrument": "No conversions for this instrument"
+    "noConversionsForInstrument": "No conversions for this instrument",
+    "processingBar": "Processing · {{progress}}% — tap",
+    "activeJobTitle": "A conversion is in progress",
+    "activeJobBody": "A conversion is already running. Wait for it to finish or return to it.",
+    "goToActive": "Return to it"
   },
   "settings": {
     "title": "Settings",

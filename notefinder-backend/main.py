@@ -22,7 +22,7 @@ import jobs  # arka plan is mekanizmasi (registry + SQLite + ThreadPoolExecutor)
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 # Arka plan job sure tahminleri (kaba ilerleme cubugu icin)
-OMR_EST_SEC = 360        # oemer ~6 dk
+OMR_EST_SEC = 420        # oemer ~6-7 dk (ticker 84'e erken dayanmasin diye 7 dk)
 TRANSCRIBE_EST_SEC = 180  # demucs+basic-pitch ~3 dk
 TRANSCRIBE_TIMEOUT_SEC = 900  # transcribe job'i icin 15 dk sert ust sinir (takilirsa job failed)
 

@@ -79,7 +79,11 @@
     "galleryPermBody": "Galeriden nota fotoğrafı seçmek için erişim iznine ihtiyaç var. Cihaz ayarlarından izin verebilirsin.",
     "selectInstrumentTitle": "Enstrüman seç",
     "selectInstrumentBody": "Devam etmek için önce bir enstrüman seç.",
-    "noConversionsForInstrument": "Bu enstrümanda dönüşüm yok"
+    "noConversionsForInstrument": "Bu enstrümanda dönüşüm yok",
+    "processingBar": "İşleniyor · %{{progress}} — dokun",
+    "activeJobTitle": "Bir dönüşüm sürüyor",
+    "activeJobBody": "Bir dönüşüm zaten sürüyor. Bitmesini bekle ya da ona dön.",
+    "goToActive": "Ona dön"
   },
   "settings": {
     "title": "Ayarlar",

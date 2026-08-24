@@ -1,12 +1,13 @@
 import "./src/i18n"; // i18n'i mumkun oldugunca erken baslat (diger importlardan once)
-import React from "react";
-import { StatusBar, Text, View, Platform } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { StatusBar, Text, View, Platform, TouchableOpacity, StyleSheet } from "react-native";
 import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createBottomTabNavigator, BottomTabBar } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useTranslation } from "react-i18next";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeContext";
+import { getJobs, getJob, reconcileProcessingJobs } from "./src/services/jobs";
 
 import HomeScreen from "./src/screens/HomeScreen";
 import LoadingScreen from "./src/screens/LoadingScreen";
@@ -46,6 +47,60 @@ function HistoryStack() {
   );
 }
 
+// Aktif (processing) is varsa tab bar USTUNDE ince "İşleniyor · %70 — dokun" cubugu.
+// Her 4 sn'de storage + backend'i yoklar; dokununca Loading'e goturur; is bitince kaybolur.
+function ActiveJobBar({ navigation }) {
+  const { t } = useTranslation();
+  const { colors } = useTheme();
+  const [active, setActive] = useState(null);
+  const [progress, setProgress] = useState(0);
+  const timerRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    const tick = async () => {
+      try {
+        const list = await getJobs();
+        const p = list.find((j) => j.status === "processing");
+        if (!p) {
+          if (mountedRef.current) setActive(null);
+        } else {
+          const job = await getJob(p.jobId);
+          if (!mountedRef.current) return;
+          if (job && (job.status === "done" || job.status === "failed")) {
+            await reconcileProcessingJobs().catch(() => {}); // storage guncelle + bildirim
+            setActive(null);
+          } else {
+            setActive({ jobId: p.jobId, title: p.title, instrument: p.instrument });
+            if (job && typeof job.progress === "number") setProgress(job.progress);
+          }
+        }
+      } catch (e) { /* sessiz */ }
+      timerRef.current = setTimeout(tick, 4000);
+    };
+    tick();
+    return () => { mountedRef.current = false; if (timerRef.current) clearTimeout(timerRef.current); };
+  }, []);
+
+  if (!active) return null;
+  const s = barStyles(colors);
+  return (
+    <TouchableOpacity
+      style={s.bar}
+      activeOpacity={0.8}
+      onPress={() => navigation.navigate("Home", { screen: "Loading", params: { jobId: active.jobId, instrument: active.instrument, title: active.title } })}
+    >
+      <Text style={s.text} numberOfLines={1}>🎵 {t("home.processingBar", { progress: Math.round(progress) })}</Text>
+    </TouchableOpacity>
+  );
+}
+
+const barStyles = (c) => StyleSheet.create({
+  bar: { backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border, paddingVertical: 10, paddingHorizontal: 16, flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  text: { color: c.primary, fontSize: 13, fontWeight: "700" },
+});
+
 // Navigator + chrome (tab bar, StatusBar, nav teması) — ThemeProvider'IN ICINDE,
 // boylece useTheme burada calisir ve tema degisince renkler aninda guncellenir.
 function AppNavigator() {
@@ -73,6 +128,12 @@ function AppNavigator() {
       <StatusBar barStyle={mode === "dark" ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
       <NavigationContainer theme={navTheme}>
         <Tab.Navigator
+          tabBar={(props) => (
+            <>
+              <ActiveJobBar navigation={props.navigation} />
+              <BottomTabBar {...props} />
+            </>
+          )}
           screenOptions={({ route }) => ({
             headerShown: false,
             tabBarStyle: { backgroundColor: colors.bg, borderTopColor: colors.border, borderTopWidth: 1, height: 70, paddingBottom: 12, paddingTop: 6 },
