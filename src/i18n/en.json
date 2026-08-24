@@ -71,6 +71,9 @@
     "photoTake": "Take photo",
     "photoPick": "Choose from gallery",
     "photoHint": "High accuracy from printed sheet music. May take 5-7 minutes; crop just the notes.",
+    "sourceModalTitle": "Which instrument is this sheet written for?",
+    "sourceModalSub": "If it's for a different instrument, it'll be adapted to your target (octave).",
+    "sourceUnknown": "I don't know",
     "photoJobTitle": "Sheet photo",
     "stepUploadingPhoto": "Uploading photo...",
     "stepUploadingPhotoSize": "Uploading photo... ({{size}} MB)",
@@ -107,6 +110,8 @@
   },
   "result": {
     "newSong": "New Song",
+    "adaptedInfo": "Written for {{source}}, adapted for {{target}}",
+    "asIsInfo": "Transferred as-is",
     "first20Notes": "First 20 notes:",
     "tempo": "Tempo",
     "key": "Key",

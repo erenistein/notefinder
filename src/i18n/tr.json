@@ -71,6 +71,9 @@
     "photoTake": "Fotoğraf çek",
     "photoPick": "Galeriden seç",
     "photoHint": "Basılı notadan yüksek doğruluk. İşlem 5-7 dakika sürebilir; sadece notaları kırpın.",
+    "sourceModalTitle": "Bu nota hangi enstrüman için yazılmış?",
+    "sourceModalSub": "Farklı bir enstrümanın notasıysa hedef enstrümana uyarlanır (oktav).",
+    "sourceUnknown": "Bilmiyorum",
     "photoJobTitle": "Nota fotoğrafı",
     "stepUploadingPhoto": "Fotoğraf yükleniyor...",
     "stepUploadingPhotoSize": "Fotoğraf yükleniyor... ({{size}} MB)",
@@ -107,6 +110,8 @@
   },
   "result": {
     "newSong": "Yeni Şarkı",
+    "adaptedInfo": "{{source}} için yazılmış, {{target}} için uyarlandı",
+    "asIsInfo": "Nota olduğu gibi aktarıldı",
     "first20Notes": "İlk 20 nota:",
     "tempo": "Tempo",
     "key": "Anahtar",

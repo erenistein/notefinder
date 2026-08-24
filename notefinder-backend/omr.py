@@ -148,6 +148,52 @@ def _run_oemer(image_path, out_dir):
     return mxl
 
 
+# ── Kaynak->hedef enstruman UYARLAMA (sadece OKTAV kaydirmasi; yarim ses YOK -> makam/akort'a girmeyiz) ──
+INSTRUMENT_RANGES = {
+    "piano":  (21, 108),
+    "guitar": (40, 88),
+    "saz":    (45, 81),
+    "violin": (55, 103),
+    "ud":     (36, 74),
+}
+
+
+def _inst_key(x):
+    """Enstruman degerini string anahtara cevir (InstrumentType enum de olabilir)."""
+    if x is None:
+        return None
+    return x.value if hasattr(x, "value") else str(x)
+
+
+def transpose_for_instrument(score, source, target):
+    """Kaynak enstruman icin yazilmis skoru HEDEF enstruman araligina OKTAV kaydirmasiyla uyarlar.
+    Kaynak yoksa/hedefle ayniysa dokunmaz. Yalniz ±12'nin katlari -> yazim (nota adi) DEGISMEZ, yalniz oktav.
+    Skorun ortalama perdesini hedef araligin ortasina en yakin getiren tek oktav kaymasi uygulanir;
+    aralik disinda kalan tek tuk nota en yakin oktava cekilir. Doner: (score, uygulandi_mi)."""
+    src, tgt = _inst_key(source), _inst_key(target)
+    if not src or src == tgt:
+        return score, False
+    lo, hi = INSTRUMENT_RANGES.get(tgt, INSTRUMENT_RANGES["piano"])
+    mid = (lo + hi) / 2.0
+    note_els = list(score.recurse().notes)
+    pitches = [p for n in note_els for p in n.pitches]
+    if not pitches:
+        return score, False
+    avg = sum(p.midi for p in pitches) / len(pitches)
+    k = int(round((mid - avg) / 12.0))  # en yakin OKTAV kaymasi (±12 kati)
+    for p in pitches:
+        if k:
+            p.octave = (p.octave if p.octave is not None else 4) + k
+        g = 0
+        while p.midi < lo and g < 12:
+            p.octave = (p.octave or 4) + 1; g += 1
+        g = 0
+        while p.midi > hi and g < 12:
+            p.octave = (p.octave or 4) - 1; g += 1
+    print(f"OMR uyarlama: {src} -> {tgt}  oktav_kaymasi={k}  (hedef aralik {lo}-{hi}, ort perde {avg:.0f})")
+    return score, True
+
+
 def extract_from_score(score, job_id):
     """Parse edilmis music21 skorundan (notes, bpm, key_name, key_idx, key_is_major) uretir.
     Yazim (bemol/diyez) DOGRUDAN skordan korunur; tekrarlar/dolaplar acilir; indirme MIDI'si yazilir.
@@ -250,9 +296,11 @@ def extract_from_score(score, job_id):
     return notes, bpm, key_name, key_idx, key_is_major
 
 
-def omr_to_notes(image_path, job_id, progress_cb=None):
-    """Foto -> (notes, tempo, key_name, key_idx, key_is_major, cached).
-    progress_cb(pct, msg) opsiyonel ilerleme bildirimi (arka plan job icin)."""
+def omr_to_notes(image_path, job_id, progress_cb=None, source=None, target=None):
+    """Foto -> (notes, tempo, key_name, key_idx, key_is_major, cached, converted_from).
+    source/target: kaynak/hedef enstruman (opsiyonel). Kaynak varsa ve hedeften farkliysa,
+    skor CACHE'TEN SONRA hedef araligina OKTAV kaydirmasiyla uyarlanir; converted_from=kaynak.
+    Ayni foto farkli hedeflere oemer'i tekrar calistirmadan (cache HIT) donusur."""
     from music21 import converter
     import omr_cache
 
@@ -277,11 +325,13 @@ def omr_to_notes(image_path, job_id, progress_cb=None):
         mxl = omr_cache.store(image_path, raw_mxl)
 
     cb(90, "Nota kagidi hazirlaniyor")
-    # 3) music21 parse -> skordan notes/key/bpm (yazim korunur)
+    # 3) music21 parse -> (kaynak->hedef uyarlama, CACHE'TEN SONRA) -> skordan notes/key/bpm (yazim korunur)
     try:
         score = converter.parse(mxl)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Nota dosyasi okunamadi: {str(e)[:120]}")
 
+    score, converted = transpose_for_instrument(score, source, target)
     notes, bpm, key_name, key_idx, key_is_major = extract_from_score(score, job_id)
-    return notes, bpm, key_name, key_idx, key_is_major, cached
+    converted_from = _inst_key(source) if converted else None
+    return notes, bpm, key_name, key_idx, key_is_major, cached, converted_from

@@ -53,6 +53,7 @@ export default function LoadingScreen({ navigation, route }) {
       jobId, title: safeTitle, instrument,
       tempo: r.tempo, key: r.key, totalNotes: r.total_notes,
       duration: r.duration_seconds, hasPdf: !!r.pdf_file, status: "done",
+      convertedFrom: r.converted_from, // OMR: kaynak enstruman (null=ayni; undefined=ses akisi)
     });
     // "Notaların hazır" yerel bildirimi (arka planda kalindiysa da haber olsun). Fire-and-forget.
     notifyReady(t("notif.readyTitle"), t("notif.readyBody", { title: safeTitle }));
@@ -60,6 +61,7 @@ export default function LoadingScreen({ navigation, route }) {
       instrument, title: safeTitle, jobId,
       tempo: r.tempo, key: r.key, totalNotes: r.total_notes, duration: r.duration_seconds,
       pdfFile: r.pdf_file, midiFile: r.midi_file, notes: r.notes || [],
+      convertedFrom: r.converted_from,
     });
   }, [jobId, instrument, safeTitle, navigation, t]);
 

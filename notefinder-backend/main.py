@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from enum import Enum
+from typing import Optional
 import mido
 import threading
 from dotenv import load_dotenv
@@ -162,6 +163,7 @@ class ConvertResponse(BaseModel):
 class OmrRequest(BaseModel):
     job_id: str
     instrument: InstrumentType = InstrumentType.PIANO
+    source_instrument: Optional[InstrumentType] = None  # notanin YAZILDIGI enstruman; yoksa=hedefle ayni
 
 # ─── Yardimci Fonksiyonlar ───
 
@@ -1481,8 +1483,9 @@ def omr_from_photo(request: OmrRequest):
         validate_sheet_image(image_path)  # boyut + porte on-kontrolu (reddederse anlamli 4xx)
         stop_tick = jobs.make_ticker(job_id, est=OMR_EST_SEC, lo=15, hi=85)  # oemer icin zaman-tabanli kaba ilerleme
         try:
-            notes, tempo, key_name, key_idx, key_is_major, cached = omr_to_notes(
-                image_path, job_id, progress_cb=prog)
+            notes, tempo, key_name, key_idx, key_is_major, cached, converted_from = omr_to_notes(
+                image_path, job_id, progress_cb=prog,
+                source=request.source_instrument, target=instrument)
         finally:
             stop_tick()
         prog(93, "Nota kagidi olusturuluyor")
@@ -1493,6 +1496,7 @@ def omr_from_photo(request: OmrRequest):
             "job_id": job_id, "status": "completed", "tempo": tempo, "key": key_name,
             "total_notes": len(notes), "duration_seconds": round(duration, 2),
             "notes": notes[:50], "midi_file": f"{job_id}.mid", "pdf_file": pdf_file, "cached": cached,
+            "converted_from": converted_from,
         }
 
     jobs.submit(job_id, work)

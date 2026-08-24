@@ -33,8 +33,11 @@ export function startTranscribe(jobId, instrument, useDemucs = true) {
 }
 
 // Foto OMR'yi arka planda baslat. job_id doner. (Foto onceden /audio/upload ile yuklenmis olmali.)
-export function startOmr(jobId, instrument) {
-  return startJob("/api/v1/omr/from-photo", { job_id: jobId, instrument });
+// source: notanin yazildigi enstruman (opsiyonel). Verilirse hedef araligina uyarlanir (oktav).
+export function startOmr(jobId, instrument, source) {
+  const body = { job_id: jobId, instrument };
+  if (source) body.source_instrument = source; // yoksa/null -> hedefle ayni kabul (uyarlama yok)
+  return startJob("/api/v1/omr/from-photo", body);
 }
 
 // Tek seferlik durum sorgusu. Basarili -> { status, progress, message, result?, error? }; hata -> null.

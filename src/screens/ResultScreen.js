@@ -20,9 +20,15 @@ export default function ResultScreen({ navigation, route }) {
   const totalNotes = route.params?.totalNotes || 0;
   const notes = route.params?.notes || [];
   const hasPdf = !!route.params?.pdfFile;
+  // OMR uyarlama: undefined=ses akisi (gizle); null=kaynak==hedef (oldugu gibi); str=kaynak enstruman
+  const convertedFrom = route.params?.convertedFrom;
   const [downloading, setDownloading] = useState(false);
 
   const inst = INSTRUMENTS.find((i) => i.id === currentInstrument);
+  const instName = (id) => {
+    const x = INSTRUMENTS.find((i) => i.id === id);
+    return x ? t(`instruments.${x.id}`) : id;
+  };
 
   const formatDuration = (sec) => {
     const m = Math.floor(sec / 60);
@@ -64,6 +70,16 @@ export default function ResultScreen({ navigation, route }) {
           <View style={s.headerCenter}><Text style={s.headerTitle}>{songTitle}</Text><Text style={s.headerSub}>{inst?.icon} {inst ? t(`instruments.${inst.id}`) : currentInstrument} · {keyName}</Text></View>
           <View style={{ width: 40 }} />
         </View>
+
+        {convertedFrom !== undefined && (
+          <View style={s.adaptRow}>
+            <Text style={s.adaptText}>
+              {convertedFrom
+                ? `🎚️ ${t("result.adaptedInfo", { source: instName(convertedFrom), target: instName(currentInstrument) })}`
+                : `✓ ${t("result.asIsInfo")}`}
+            </Text>
+          </View>
+        )}
 
         <View style={[s.sheet, { borderColor: inst?.color + "40" }]}>
           <View style={s.notesList}>
@@ -111,6 +127,8 @@ const makeStyles = (c) => StyleSheet.create({
   header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   backBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.surface, alignItems: "center", justifyContent: "center" }, backText: { fontSize: 20, color: c.text },
   headerCenter: { flex: 1, alignItems: "center" }, headerTitle: { fontSize: 18, fontWeight: "700", color: c.text }, headerSub: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
+  adaptRow: { backgroundColor: c.surfaceLight, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, marginBottom: 12 },
+  adaptText: { fontSize: 12, color: c.textSecondary, fontWeight: "500" },
   sheet: { borderRadius: 16, borderWidth: 1, backgroundColor: c.surface, padding: 16, marginBottom: 16, minHeight: 200 },
   notesList: { gap: 6 },
   notesTitle: { fontSize: 13, fontWeight: "600", marginBottom: 8 },

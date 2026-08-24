@@ -58,6 +58,8 @@ export default function HomeScreen({ navigation }) {
   const [nameModalVisible, setNameModalVisible] = useState(false);
   const [recordName, setRecordName] = useState("");
   const [pendingUri, setPendingUri] = useState(null);
+  const [sourceModalVisible, setSourceModalVisible] = useState(false);
+  const [pendingAsset, setPendingAsset] = useState(null);
   const [jobs, setJobs] = useState([]);
 
   const loadJobs = useCallback(async () => {
@@ -197,11 +199,21 @@ export default function HomeScreen({ navigation }) {
         });
       }
 
-      await processPhoto(asset);
+      // Upload ONCESI: bu nota hangi enstruman icin yazilmis? (kaynak) -> modal
+      setPendingAsset(asset);
+      setSourceModalVisible(true);
     } catch (e) {
       console.warn("Foto secme hatasi:", e);
       Alert.alert(t("common.error"), e?.message || "");
     }
+  };
+
+  // Kaynak enstruman secildi (id) ya da "Bilmiyorum" (null) -> upload + OMR.
+  const onSourcePick = (sourceId) => {
+    setSourceModalVisible(false);
+    const asset = pendingAsset;
+    setPendingAsset(null);
+    if (asset) processPhoto(asset, sourceId);
   };
 
   // Upload ONCESI kucultme/format: uzun kenar > 2400 -> 2400'e olcekle (orani koru); her durumda
@@ -222,7 +234,7 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const processPhoto = async (asset) => {
+  const processPhoto = async (asset, source) => {
     setLoading(true);
     try {
       setLoadingStep(t("home.stepUploadingPhoto"));
@@ -253,7 +265,9 @@ export default function HomeScreen({ navigation }) {
       }
       const upData = await upRes.json();
       ensureNotifPermission();
-      const newJobId = await startOmr(upData.job_id, selectedInstrument);
+      // source: kaynak enstruman (null=Bilmiyorum -> hedefle ayni). target=selectedInstrument.
+      const src = source && source !== selectedInstrument ? source : null;
+      const newJobId = await startOmr(upData.job_id, selectedInstrument, src);
       const title = t("home.photoJobTitle");
       await saveJob({ jobId: newJobId, title, instrument: selectedInstrument, status: "processing" });
       setLoading(false);
@@ -518,6 +532,26 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={sourceModalVisible} transparent animationType="fade" onRequestClose={() => onSourcePick(null)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <Text style={s.modalTitle}>{t("home.sourceModalTitle")}</Text>
+            <Text style={s.modalSub}>{t("home.sourceModalSub")}</Text>
+            <View style={s.sourceGrid}>
+              {INSTRUMENTS.map((inst) => (
+                <TouchableOpacity key={inst.id} style={s.sourceBtn} onPress={() => onSourcePick(inst.id)} activeOpacity={0.8}>
+                  <Text style={s.sourceIcon}>{inst.icon}</Text>
+                  <Text style={s.sourceName}>{t(`instruments.${inst.id}`)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity style={s.sourceUnknownBtn} onPress={() => onSourcePick(null)} activeOpacity={0.8}>
+              <Text style={s.sourceUnknownText}>{t("home.sourceUnknown")}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -584,4 +618,9 @@ const makeStyles = (c) => StyleSheet.create({
   modalBtnText: { color: c.text, fontSize: 14, fontWeight: "600" },
   modalBtnPrimary: { backgroundColor: c.primary, borderColor: c.primary },
   modalBtnPrimaryText: { color: c.white, fontSize: 14, fontWeight: "700" },
+  sourceGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  sourceBtn: { flexBasis: "30%", flexGrow: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.bg, alignItems: "center" },
+  sourceIcon: { fontSize: 22, marginBottom: 4 }, sourceName: { fontSize: 11, fontWeight: "600", color: c.text },
+  sourceUnknownBtn: { marginTop: 12, paddingVertical: 13, borderRadius: 12, borderWidth: 1, borderColor: c.border, backgroundColor: c.surfaceLight, alignItems: "center" },
+  sourceUnknownText: { fontSize: 14, fontWeight: "600", color: c.textSecondary },
 });

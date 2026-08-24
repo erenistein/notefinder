@@ -53,6 +53,7 @@ export function jobToResultParams(job) {
     duration: job.duration || 0,
     pdfFile: job.hasPdf ? `${job.jobId}.pdf` : "",
     notes: [],
+    convertedFrom: job.convertedFrom, // OMR uyarlama bilgisi (undefined=ses; null=ayni; str=kaynak)
   };
 }
 
