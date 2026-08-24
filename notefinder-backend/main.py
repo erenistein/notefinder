@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from enum import Enum
 import mido
+import threading
 from dotenv import load_dotenv
 import jobs  # arka plan is mekanizmasi (registry + SQLite + ThreadPoolExecutor)
 
@@ -23,6 +24,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 # Arka plan job sure tahminleri (kaba ilerleme cubugu icin)
 OMR_EST_SEC = 360        # oemer ~6 dk
 TRANSCRIBE_EST_SEC = 180  # demucs+basic-pitch ~3 dk
+TRANSCRIBE_TIMEOUT_SEC = 900  # transcribe job'i icin 15 dk sert ust sinir (takilirsa job failed)
 
 app = FastAPI(title="NoteFindr API", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -589,18 +591,21 @@ def separate_audio(wav_path, instrument="piano"):
             return wav_path
         output_dir = os.path.join(OUTPUT_DIR, "separated")
         os.makedirs(output_dir, exist_ok=True)
-        print(f"Demucs baslatiliyor (4 stem): {wav_path}")
+        track_name = os.path.splitext(os.path.basename(wav_path))[0]
+        demucs_log = os.path.join(OUTPUT_DIR, f"demucs_{track_name}.log")
+        print(f"Demucs baslatiliyor (4 stem): {wav_path}  (log: {demucs_log})")
         # sys.executable = backend'i calistiran ANA venv python'u (demucs orada kurulu).
         # Bare "python" Windows Store stub'ina dusup "No module named demucs" veriyordu.
-        result = subprocess.run(
-            [sys.executable, "-m", "demucs",
-             "-o", output_dir,
-             "--filename", "{track}/{stem}.{ext}",
-             wav_path],
-            capture_output=True, text=True, timeout=600,
-        )
+        # Cikti PIPE yerine DOSYAYA -> tampon dolsa da kilitlenmez, ilerleme/hatalar kalici log'da kalir.
+        with open(demucs_log, "wb") as _dl:
+            result = subprocess.run(
+                [sys.executable, "-m", "demucs",
+                 "-o", output_dir,
+                 "--filename", "{track}/{stem}.{ext}",
+                 wav_path],
+                stdout=_dl, stderr=subprocess.STDOUT, timeout=600,
+            )
         print(f"Demucs bitti. Return code: {result.returncode}")
-        track_name = os.path.splitext(os.path.basename(wav_path))[0]
         base_dir = os.path.join(output_dir, "htdemucs", track_name)
         
         # Enstrumana gore dogru stem sec
@@ -1484,10 +1489,33 @@ def omr_from_photo(request: OmrRequest):
     return {"job_id": job_id, "status": "queued"}
 
 
+def _run_with_timeout(fn, seconds, timeout_msg):
+    """fn()'i ayri thread'de calistir; `seconds` icinde bitmezse RuntimeError(timeout_msg) firlat.
+    (Alttaki thread arka planda devam eder ama subprocess timeout'lariyla sonlanir; sonucu atilir.)
+    fn bir istisna firlatirsa ayni istisna cagirana yeniden firlatilir."""
+    box = {}
+
+    def runner():
+        try:
+            box["result"] = fn()
+        except BaseException as e:  # noqa: BLE001 (istisnayi ana thread'e tasi)
+            box["error"] = e
+
+    th = threading.Thread(target=runner, daemon=True)
+    th.start()
+    th.join(seconds)
+    if th.is_alive():
+        raise RuntimeError(timeout_msg)  # job runner -> failed(timeout_msg)
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")
+
+
 @app.post("/api/v1/transcribe", status_code=202)
 def transcribe_async(request: TranscribeRequest):
     """Ses transkripsiyonunu ARKA PLAN job olarak calistir. Hemen 202 + job_id.
-    Ilerleme/sonuc GET /api/v1/jobs/{job_id}. Senkron davranis: /api/v1/transcribe/sync."""
+    Ilerleme/sonuc GET /api/v1/jobs/{job_id}. Senkron davranis: /api/v1/transcribe/sync.
+    15 dk'yi asarsa job 'İşlem çok uzun sürdü' ile failed olur (kullanici bloke kalmasin)."""
     job_id = request.job_id
     jobs.create_job(job_id, "transcribe")
 
@@ -1495,7 +1523,11 @@ def transcribe_async(request: TranscribeRequest):
         prog(15, "Ses isleniyor")
         stop_tick = jobs.make_ticker(job_id, est=TRANSCRIBE_EST_SEC, lo=15, hi=90)
         try:
-            resp = transcribe_audio(request)  # mevcut senkron mantik (IC MANTIK DEGISMEDI)
+            resp = _run_with_timeout(
+                lambda: transcribe_audio(request),  # mevcut senkron mantik (IC MANTIK DEGISMEDI)
+                TRANSCRIBE_TIMEOUT_SEC,
+                "İşlem çok uzun sürdü, lütfen daha kısa veya daha net bir parça deneyin.",
+            )
         finally:
             stop_tick()
         prog(95, "Nota kagidi olusturuluyor")
