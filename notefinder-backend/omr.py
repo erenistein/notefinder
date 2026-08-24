@@ -148,42 +148,16 @@ def _run_oemer(image_path, out_dir):
     return mxl
 
 
-def omr_to_notes(image_path, job_id, progress_cb=None):
-    """Foto -> (notes, tempo, key_name, key_idx, key_is_major, cached).
-    progress_cb(pct, msg) opsiyonel ilerleme bildirimi (arka plan job icin).
-    read_midi_notes'u ANA venv'den lazy import eder (dairesel import'u onler)."""
-    from music21 import converter, tempo as m21tempo, key as m21key
+def extract_from_score(score, job_id):
+    """Parse edilmis music21 skorundan (notes, bpm, key_name, key_idx, key_is_major) uretir.
+    Yazim (bemol/diyez) DOGRUDAN skordan korunur; tekrarlar/dolaplar acilir; indirme MIDI'si yazilir.
+    Anahtar: ONCE MusicXML KeySignature; KURAL: fifths=0 ama notalarin >%20'si arizali VE analiz
+    guvenli (correlation>=0.75) ise analyze('key') kullanilir. omr_to_notes ile MusicXML'den
+    yeniden-render bunu ortak kullanir (oemer'i tekrar calistirmaya gerek yok)."""
+    from music21 import tempo as m21tempo, key as m21key
     from main import NOTE_NAMES  # lazy -> dairesel import yok
-    import omr_cache
 
-    def cb(p, m=None):
-        if progress_cb:
-            progress_cb(p, m)
-
-    # 1) CACHE: ayni (SHA-256) veya benzer (pHash) gorsel daha once islendiyse oemer'i ATLA
-    cb(10, "Onbellek kontrol ediliyor")
-    cached = False
-    mxl, matched_by, dist = omr_cache.lookup(image_path)
-    if mxl:
-        cached = True
-        cb(85, "Onbellekten bulundu")
-        print(f"OMR cache HIT ({matched_by}, hamming={dist})")
-    else:
-        # 2) On-isleme (varsayilan KAPALI) -> oemer -> MusicXML -> kalici cache'e yaz
-        cb(15, "Nota taniniyor (birkac dakika surebilir)")
-        proc = preprocess(image_path) if OMR_PREPROCESS else image_path
-        out_dir = os.path.join(OUTPUT_DIR, "omr_" + job_id)
-        raw_mxl = _run_oemer(proc, out_dir)
-        mxl = omr_cache.store(image_path, raw_mxl)
-
-    cb(90, "Nota kagidi hazirlaniyor")
-    # 3) music21 parse
-    try:
-        score = converter.parse(mxl)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Nota dosyasi okunamadi: {str(e)[:120]}")
-
-    # 4) tempo: metronom isareti, yoksa 120
+    # tempo: metronom isareti, yoksa 120
     marks = list(score.recurse().getElementsByClass(m21tempo.MetronomeMark))
     bpm = 120
     for mk in marks:
@@ -192,8 +166,7 @@ def omr_to_notes(image_path, job_id, progress_cb=None):
     if not marks:
         score.insert(0, m21tempo.MetronomeMark(number=bpm))
 
-    # 4b) TEKRARLARI AC (repeat/volta/dolap) -> notalar lineer sirada, son satir kaybolmasin.
-    #     Basarisiz olursa ORIJINAL skorla devam (nota kaybetmemek onceligi).
+    # Tekrarlari/dolaplari ac (repeat/volta) -> notalar lineer, son satir kaybolmasin.
     try:
         expanded = score.expandRepeats()
         if expanded is not None and list(expanded.recurse().notes):
@@ -202,30 +175,52 @@ def omr_to_notes(image_path, job_id, progress_cb=None):
     except Exception as e:
         print(f"OMR: expandRepeats atlandi ({str(e)[:120]}); olculer lineer aynen kullanilacak.")
 
-    # 5) key: ONCE MusicXML'deki anahtar (oemer yazdiysa); YOKSA analiz (donanim/isaret yoksa fallback)
+    # Anahtar: MusicXML KeySignature (Key de alt sinifi). fifths=0 + bol ariza -> guvenliyse analiz.
     key_idx, key_is_major = 0, True
     try:
-        kobj = score.recurse().getElementsByClass(m21key.Key).first()
+        ksig = score.recurse().getElementsByClass(m21key.KeySignature).first()
+        sig_sharps = int(ksig.sharps) if ksig is not None else 0
+        if isinstance(ksig, m21key.Key):
+            kobj = ksig
+        elif ksig is not None:
+            kobj = ksig.asKey("major")   # yalniz signature -> major varsay
+        else:
+            kobj = None
+
+        flat_notes = list(score.flatten().notes)
+        n_pitch = sum(len(e.pitches) for e in flat_notes)
+        n_acc = sum(1 for e in flat_notes for p in e.pitches
+                    if p.accidental is not None and p.accidental.alter != 0)
+        acc_ratio = (n_acc / n_pitch) if n_pitch else 0.0
+
+        if sig_sharps == 0 and acc_ratio > 0.20:
+            try:
+                an = score.analyze("key")
+                corr = float(getattr(an, "correlationCoefficient", 0.0) or 0.0)
+                if corr >= 0.75:
+                    kobj = an
+                    print(f"OMR key: fifths=0 + ariza=%{acc_ratio*100:.0f} -> analiz ({an}, corr={corr:.2f}).")
+                else:
+                    print(f"OMR key: analiz guveni dusuk (corr={corr:.2f}<0.75) -> fifths=0 korundu.")
+            except Exception:
+                pass
+
         if kobj is None:
-            ksig = score.recurse().getElementsByClass(m21key.KeySignature).first()
-            if ksig is not None:
-                kobj = ksig.asKey("major")   # yalniz signature -> major varsay
-        if kobj is None:
-            kobj = score.analyze("key")      # son care: Krumhansl analizi
+            kobj = score.analyze("key")   # imza hic yoksa son care
         key_idx = int(kobj.tonic.pitchClass)  # 0=Do/C .. 11=Si/B
         key_is_major = (kobj.mode == "major")
     except Exception:
         pass
     key_name = NOTE_NAMES[key_idx] + (" Major" if key_is_major else " Minor")
 
-    # 6) MIDI'yi indirme icin YINE yaz (skordan), AMA notes listesi DOGRUDAN music21 skorundan
-    #    uretilir (MIDI->numaradan degil) -> yazim (Si♭ vs La#) korunur.
+    # Indirme MIDI'si (skordan)
     midi_path = os.path.join(OUTPUT_DIR, f"{job_id}_full.mid")
     try:
         score.write("midi", fp=midi_path)
     except Exception as e:
         print(f"OMR: indirme MIDI'si yazilamadi ({str(e)[:120]}).")
 
+    # Notalar DOGRUDAN skordan (MIDI numarasindan degil) -> yazim (Si♭ vs La#) korunur.
     beat_sec = 60.0 / max(1, bpm)
     notes = []
     for el in score.flatten().notes:  # Note + Chord (akorlar tek tek perdeye acilir)
@@ -252,5 +247,41 @@ def omr_to_notes(image_path, job_id, progress_cb=None):
     notes.sort(key=lambda x: (x["start"], x["midi"]))
     if not notes:
         raise HTTPException(status_code=422, detail="Fotograftan gecerli nota cikmadi (bos sonuc). Daha net bir foto deneyin.")
+    return notes, bpm, key_name, key_idx, key_is_major
 
+
+def omr_to_notes(image_path, job_id, progress_cb=None):
+    """Foto -> (notes, tempo, key_name, key_idx, key_is_major, cached).
+    progress_cb(pct, msg) opsiyonel ilerleme bildirimi (arka plan job icin)."""
+    from music21 import converter
+    import omr_cache
+
+    def cb(p, m=None):
+        if progress_cb:
+            progress_cb(p, m)
+
+    # 1) CACHE: ayni (SHA-256) veya benzer (pHash) gorsel daha once islendiyse oemer'i ATLA
+    cb(10, "Onbellek kontrol ediliyor")
+    cached = False
+    mxl, matched_by, dist = omr_cache.lookup(image_path)
+    if mxl:
+        cached = True
+        cb(85, "Onbellekten bulundu")
+        print(f"OMR cache HIT ({matched_by}, hamming={dist})")
+    else:
+        # 2) On-isleme (varsayilan KAPALI) -> oemer -> MusicXML -> kalici cache'e yaz
+        cb(15, "Nota taniniyor (birkac dakika surebilir)")
+        proc = preprocess(image_path) if OMR_PREPROCESS else image_path
+        out_dir = os.path.join(OUTPUT_DIR, "omr_" + job_id)
+        raw_mxl = _run_oemer(proc, out_dir)
+        mxl = omr_cache.store(image_path, raw_mxl)
+
+    cb(90, "Nota kagidi hazirlaniyor")
+    # 3) music21 parse -> skordan notes/key/bpm (yazim korunur)
+    try:
+        score = converter.parse(mxl)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"Nota dosyasi okunamadi: {str(e)[:120]}")
+
+    notes, bpm, key_name, key_idx, key_is_major = extract_from_score(score, job_id)
     return notes, bpm, key_name, key_idx, key_is_major, cached
